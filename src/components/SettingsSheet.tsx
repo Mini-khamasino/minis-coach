@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { CloudUpload, Download, X } from 'lucide-react'
 import { db, saveSettings, type Settings } from '../lib/db.ts'
 import { backup, restore, daysSinceBackup } from '../lib/backup.ts'
+import { pickModel } from '../lib/coach.ts'
 import { mifflin } from '../lib/calc.ts'
 import { Sheet, toast } from './ui.tsx'
 
@@ -17,9 +18,25 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
   const save = async () => {
     // theme + lastBackup can change while the sheet is open; don't overwrite them with the stale form copy
     const { theme: _t, lastBackup: _b, ...rest } = form
-    await saveSettings({ ...rest, apiKey: form.apiKey.trim(), model: form.model.trim() || 'gemini-2.5-flash' })
+    await saveSettings({ ...rest, apiKey: form.apiKey.trim(), model: form.model.trim() || 'gemini-flash-latest' })
     toast('✅ اتحفظ')
     onClose()
+  }
+  const [testing, setTesting] = useState(false)
+  const testKey = async () => {
+    const key = form.apiKey.trim()
+    if (!key) return toast('الصق المفتاح الأول')
+    setTesting(true)
+    try {
+      const model = await pickModel(key)
+      setForm((f) => ({ ...f, apiKey: key, model }))
+      await saveSettings({ apiKey: key, model })
+      toast(`✅ المفتاح شغال واتحفظ — ${model}`)
+    } catch (e) {
+      toast(`⚠️ ${(e as Error).message}`)
+    } finally {
+      setTesting(false)
+    }
   }
   const doBackup = async () => {
     try {
@@ -67,9 +84,12 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
           <input className="field mt-1 font-mono text-[14px]" type="password" autoComplete="off" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} dir="ltr" />
         </label>
         <label className="block">
-          <span className="label">الموديل — غيّره لو جوجل وقفت النسخة دي</span>
+          <span className="label">الموديل — بيتغير لوحده لو جوجل وقفته</span>
           <input className="field mt-1 font-mono text-[14px]" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} dir="ltr" />
         </label>
+        <button className="press rounded-2xl bg-fill py-3 font-semibold text-blue disabled:opacity-50" onClick={testKey} disabled={testing}>
+          {testing ? 'بجرب…' : 'جرّب المفتاح واحفظه'}
+        </button>
       </Group>
 
       <Group title="الأهداف">

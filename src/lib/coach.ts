@@ -1,4 +1,4 @@
-import { db, getSettings, makeItem, today, MEALS, type Meal, type Settings } from './db.ts'
+import { db, getSettings, saveSettings, makeItem, today, MEALS, type Meal, type Settings } from './db.ts'
 import { FOODS, FOOD_LIST_FOR_PROMPT, type Macros } from './foods.ts'
 import { sum, addDays, trajectory, mifflin, adaptiveTdee, daysBetween, weightTrend } from './calc.ts'
 
@@ -160,31 +160,59 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
     { role: 'user', parts: [{ text: userText }] },
   ]
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents,
-        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6 },
-      }),
-    },
-  )
-  if (!res.ok) {
-    const body = await res.text()
-    if (res.status === 404) throw new Error(`الموديل "${s.model}" مش موجود — غيّره من الإعدادات`)
-    if (res.status === 400 && body.includes('API key')) throw new Error('مفتاح Gemini غلط')
-    if (res.status === 429) throw new Error('Gemini زهق (حد الاستخدام) — جرب كمان شوية')
-    throw new Error(`Gemini ${res.status}`)
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6 },
+  })
+  let res = await generate(s.model, s.apiKey, body)
+  if (res.status === 404) {
+    // Google retired the model: switch to the newest Flash this key can use, remember it, retry once.
+    const next = await pickModel(s.apiKey)
+    if (next !== s.model) {
+      await saveSettings({ model: next })
+      res = await generate(next, s.apiKey, body)
+    }
   }
+  if (!res.ok) throw await apiError(res)
   const data = await res.json()
   const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text
   if (!text) throw new Error('Gemini مرجعش رد')
   const parsed = JSON.parse(text) as GeminiReply
   if (typeof parsed.reply !== 'string') throw new Error('رد Gemini مش مفهوم')
   return parsed
+}
+
+function generate(model: string, key: string, body: string) {
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body,
+  })
+}
+
+async function apiError(res: Response): Promise<Error> {
+  const body = await res.text()
+  if (res.status === 400 && /API.?key/i.test(body)) return new Error('مفتاح Gemini غلط — انسخه تاني من aistudio')
+  if (res.status === 403) return new Error('المفتاح مش مسموح له — اتأكد إن Gemini API متفعل للمشروع')
+  if (res.status === 404) return new Error('الموديل مش موجود — اختار غيره من الإعدادات')
+  if (res.status === 429) return new Error('Gemini زهق (حد الاستخدام) — جرب كمان شوية')
+  return new Error(`Gemini ${res.status}`)
+}
+
+/** Newest stable "gemini-X.Y-flash" the key can call; falls back to the auto-updating alias. */
+export async function pickModel(key: string): Promise<string> {
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', { headers: { 'x-goog-api-key': key } })
+  if (!res.ok) throw await apiError(res)
+  const { models = [] } = (await res.json()) as { models?: { name: string; supportedGenerationMethods?: string[] }[] }
+  const names = models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name.replace(/^models\//, ''))
+  const flash = names
+    .map((n) => ({ n, v: n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)?.[1] }))
+    .filter((x) => x.v)
+    .sort((a, b) => Number(b.v) - Number(a.v))
+  const pick = flash[0]?.n ?? names.find((n) => n === 'gemini-flash-latest') ?? names.find((n) => n.includes('flash'))
+  if (!pick) throw new Error('مفيش موديل Flash متاح للمفتاح ده')
+  return pick
 }
 
 const num = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : null)
