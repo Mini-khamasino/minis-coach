@@ -160,11 +160,11 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
     { role: 'user', parts: [{ text: userText }] },
   ]
 
-  const body = JSON.stringify({
+  const body = {
     system_instruction: { parts: [{ text: system }] },
     contents,
     generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6 },
-  })
+  }
   let res = await generate(s.model, s.apiKey, body)
   if (res.status === 404) {
     // Google retired the model: switch to the newest Flash this key can use, remember it, retry once.
@@ -176,19 +176,39 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
   }
   if (!res.ok) throw await apiError(res)
   const data = await res.json()
-  const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text
+  const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts ?? []
+  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? '').join('')
   if (!text) throw new Error('Gemini مرجعش رد')
   const parsed = JSON.parse(text) as GeminiReply
   if (typeof parsed.reply !== 'string') throw new Error('رد Gemini مش مفهوم')
   return parsed
 }
 
-function generate(model: string, key: string, body: string) {
-  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body,
-  })
+/** Thinking makes Flash slow; parsing food doesn't need it. Gemini 3+ takes a level, 2.x a token budget. */
+export function thinkingFor(model: string): object | undefined {
+  const v = Number(model.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1])
+  if (v >= 3 || model.includes('latest')) return { thinkingLevel: 'low' }
+  if (v >= 2.5) return { thinkingBudget: 0 }
+  return undefined
+}
+
+async function generate(model: string, key: string, body: { generationConfig: object }) {
+  const send = (thinking?: object) =>
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ ...body, generationConfig: { ...body.generationConfig, ...(thinking && { thinkingConfig: thinking }) } }),
+    })
+  let thinking = thinkingFor(model)
+  let res = await send(thinking)
+  // 503/500 = Google overloaded: wait and retry twice before showing an error.
+  for (const wait of [1500, 3000]) {
+    if (res.status === 400 && thinking && /thinking/i.test(await res.clone().text())) thinking = undefined // model rejects the setting
+    else if (res.status !== 503 && res.status !== 500) break
+    else await new Promise((r) => setTimeout(r, wait))
+    res = await send(thinking)
+  }
+  return res
 }
 
 async function apiError(res: Response): Promise<Error> {
@@ -197,6 +217,7 @@ async function apiError(res: Response): Promise<Error> {
   if (res.status === 403) return new Error('المفتاح مش مسموح له — اتأكد إن Gemini API متفعل للمشروع')
   if (res.status === 404) return new Error('الموديل مش موجود — اختار غيره من الإعدادات')
   if (res.status === 429) return new Error('Gemini زهق (حد الاستخدام) — جرب كمان شوية')
+  if (res.status === 503 || res.status === 500) return new Error('سيرفرات Gemini زحمة دلوقتي — جرب تاني كمان دقيقة')
   return new Error(`Gemini ${res.status}`)
 }
 
