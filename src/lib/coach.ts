@@ -163,8 +163,10 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6 },
+    // cap output: JSON mode can loop on whitespace until the 65k-token limit, which takes minutes
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6, maxOutputTokens: 2048 },
   }
+  const t0 = performance.now()
   let res = await generate(s.model, s.apiKey, body)
   if (res.status === 404) {
     // Google retired the model: switch to the newest Flash this key can use, remember it, retry once.
@@ -176,7 +178,19 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
   }
   if (!res.ok) throw await apiError(res)
   const data = await res.json()
-  const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts ?? []
+  const cand = data?.candidates?.[0]
+  const stat = {
+    sec: +((performance.now() - t0) / 1000).toFixed(1),
+    model: (await getSettings()).model,
+    inTok: data?.usageMetadata?.promptTokenCount,
+    outTok: data?.usageMetadata?.candidatesTokenCount,
+    thinkTok: data?.usageMetadata?.thoughtsTokenCount,
+    finish: cand?.finishReason,
+  }
+  try { localStorage.setItem('lastCall', JSON.stringify(stat)) } catch { /* private mode */ }
+  console.info('gemini', stat)
+  if (cand?.finishReason === 'MAX_TOKENS') throw new Error('Gemini اتلخبط ورده طول — ابعت تاني')
+  const parts: { text?: string; thought?: boolean }[] = cand?.content?.parts ?? []
   const text = parts.filter((p) => !p.thought).map((p) => p.text ?? '').join('')
   if (!text) throw new Error('Gemini مرجعش رد')
   const parsed = JSON.parse(text) as GeminiReply
@@ -198,6 +212,9 @@ async function generate(model: string, key: string, body: { generationConfig: ob
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({ ...body, generationConfig: { ...body.generationConfig, ...(thinking && { thinkingConfig: thinking }) } }),
+      signal: AbortSignal.timeout(45_000),
+    }).catch((e: Error) => {
+      throw new Error(e.name === 'TimeoutError' ? 'Gemini مردش في 45 ثانية — جرب تاني' : 'مفيش نت؟ مقدرتش أوصل لـ Gemini')
     })
   let thinking = thinkingFor(model)
   let res = await send(thinking)

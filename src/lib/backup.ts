@@ -2,8 +2,8 @@ import { db, getSettings, saveSettings, today } from './db.ts'
 
 const TABLES = ['items', 'water', 'weights', 'chat', 'notes', 'customFoods', 'kv'] as const
 
-/** Share sheet → Google Drive. The API key never leaves the phone. */
-export async function backup(): Promise<'shared' | 'downloaded' | 'cancelled'> {
+/** Build the backup ahead of the tap: Android only allows share() right after a user gesture. */
+export async function prepareBackup(): Promise<File> {
   const data: Record<string, unknown[]> = {}
   for (const t of TABLES) data[t] = await db.table(t).toArray()
   data.kv = (data.kv as { key: string; value: Record<string, unknown> }[]).map((r) =>
@@ -11,26 +11,28 @@ export async function backup(): Promise<'shared' | 'downloaded' | 'cancelled'> {
   )
   const json = JSON.stringify({ app: 'minis-coach', version: 1, exportedAt: new Date().toISOString(), data })
   const base = `minis-coach-${today()}`
-
   // Chrome Android only shares allow-listed types; .json is not one, so fall back to .txt (same JSON inside).
-  for (const [ext, type] of [['json', 'application/json'], ['txt', 'text/plain']] as const) {
-    const file = new File([json], `${base}.${ext}`, { type })
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: "Mini's Coach backup" })
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return 'cancelled'
-        throw e
-      }
+  const json_ = new File([json], `${base}.json`, { type: 'application/json' })
+  return navigator.canShare?.({ files: [json_] }) ? json_ : new File([json], `${base}.txt`, { type: 'text/plain' })
+}
+
+/** Share sheet → Google Drive; download if sharing isn't allowed. The API key never leaves the phone. */
+export async function backup(file: File): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Mini's Coach backup" })
       await saveSettings({ lastBackup: Date.now() })
       return 'shared'
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return 'cancelled'
+      // NotAllowedError etc. → fall through to a plain download
     }
   }
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
-  a.download = `${base}.json`
+  a.href = URL.createObjectURL(file)
+  a.download = file.name
   a.click()
-  URL.revokeObjectURL(a.href)
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   await saveSettings({ lastBackup: Date.now() })
   return 'downloaded'
 }

@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { CloudUpload, Download, X } from 'lucide-react'
 import { db, saveSettings, type Settings } from '../lib/db.ts'
-import { backup, restore, daysSinceBackup } from '../lib/backup.ts'
+import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.ts'
 import { pickModel } from '../lib/coach.ts'
 import { mifflin } from '../lib/calc.ts'
 import { Sheet, toast } from './ui.tsx'
@@ -38,9 +38,12 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
       setTesting(false)
     }
   }
+  const [backupFile, setBackupFile] = useState<File | null>(null)
+  useEffect(() => { prepareBackup().then(setBackupFile, () => {}) }, [])
   const doBackup = async () => {
+    if (!backupFile) return toast('لحظة، بجهز الباك أب…')
     try {
-      const r = await backup()
+      const r = await backup(backupFile)
       if (r !== 'cancelled') toast(r === 'shared' ? '☁️ اختار Drive من القايمة' : '⬇️ اتنزل — ارفعه على الدرايف')
     } catch (e) {
       toast(`⚠️ ${(e as Error).message}`)
@@ -138,6 +141,7 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
       </Group>
       <p className="pb-2 text-center text-[12px] text-ink-3">
         Mini's Coach <span className="num">v{__APP_VERSION__}</span> · {new Date(__BUILD_TIME__).toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+        <br />{lastCall()}
       </p>
     </Sheet>
   )
@@ -150,4 +154,13 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       {children}
     </section>
   )
+}
+
+function lastCall() {
+  try {
+    const c = JSON.parse(localStorage.getItem('lastCall') ?? 'null')
+    return c ? `آخر رد: ${c.sec}ث · ${c.model} · ${c.inTok ?? '?'}→${c.outTok ?? '?'} توكن${c.thinkTok ? ` (+${c.thinkTok} تفكير)` : ''} · ${c.finish ?? ''}` : ''
+  } catch {
+    return ''
+  }
 }
