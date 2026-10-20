@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import { ZONE_COLOR, type Zone } from '../lib/calc.ts'
 
 export const tick = () => navigator.vibrate?.(8)
@@ -79,6 +80,25 @@ export function Bar({ label, value, max, color, unit = 'ج' }: { label: string; 
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-fill">
         <div className="h-full rounded-full" style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color, transition: 'width 600ms var(--ease-spring)' }} />
+      </div>
+    </div>
+  )
+}
+
+/** Shows when a new version is deployed; the button swaps the service worker and reloads. */
+export function UpdatePrompt() {
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(_, r) {
+      // installed PWAs resume without reloading, so check on every return to the app
+      if (r) document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && r.update())
+    },
+  })
+  if (!needRefresh) return null
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
+      <div role="alert" className="glass pop-enter flex items-center gap-3 rounded-full py-1.5 ps-4 pe-1.5 shadow-2xl">
+        <span className="text-[15px]">✨ فيه تحديث جديد</span>
+        <button className="press rounded-full bg-blue px-4 py-1.5 text-[14px] font-semibold text-white" onClick={() => updateServiceWorker(true)}>حدّث</button>
       </div>
     </div>
   )

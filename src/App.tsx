@@ -4,7 +4,7 @@ import { useSettings } from './lib/db.ts'
 import { Dashboard } from './components/Dashboard.tsx'
 import { Coach } from './components/Coach.tsx'
 import { SettingsSheet } from './components/SettingsSheet.tsx'
-import { Toaster } from './components/ui.tsx'
+import { Toaster, UpdatePrompt } from './components/ui.tsx'
 
 type Tab = 'home' | 'coach'
 
@@ -50,6 +50,7 @@ export default function App() {
 
       {settings && <SettingsSheet s={s} onClose={() => setSettings(false)} />}
       <Toaster />
+      <UpdatePrompt />
     </div>
   )
 }
