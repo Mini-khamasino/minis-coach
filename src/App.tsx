@@ -35,8 +35,9 @@ export default function App() {
         <button className="press glass grid size-10 place-items-center rounded-full" onClick={() => setSettings(true)} aria-label="الإعدادات"><Gear size={20} /></button>
       </header>
 
-      <main key={tab} className="fade-enter">
-        {tab === 'home' ? <Dashboard s={s} theme={theme} onSettings={() => setSettings(true)} /> : <Coach hasKey={!!s.apiKey} onSettings={() => setSettings(true)} />}
+      <main>
+        <div hidden={tab !== 'home'} className="fade-enter"><Dashboard s={s} theme={theme} onSettings={() => setSettings(true)} /></div>
+        <div hidden={tab !== 'coach'} className="fade-enter"><Coach hasKey={!!s.apiKey} onSettings={() => setSettings(true)} /></div>
       </main>
 
       <nav className="glass fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-30 mx-auto flex w-[min(320px,calc(100%-32px))] rounded-full p-1.5" aria-label="التبويبات">

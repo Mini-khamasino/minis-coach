@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronRight, ChevronLeft, Plus, Undo2, Sparkles, ArrowUp, CloudUpload } from 'lucide-react'
-import { db, today, MEALS, type Item, type Settings } from '../lib/db.ts'
+import { db, today, MEALS, makeItem, type Item, type Meal, type Settings } from '../lib/db.ts'
+import { FOODS, type Macros } from '../lib/foods.ts'
 import { addDays, sum, zone, ZONE_COLOR } from '../lib/calc.ts'
 import { sendToCoach } from '../lib/coach.ts'
 import { daysSinceBackup } from '../lib/backup.ts'
@@ -132,9 +133,34 @@ function Bottle({ fill, onTap }: { fill: number; onTap: () => void }) {
   )
 }
 
+const norm = (s: string) => s.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ً-ْ]/g, '').toLowerCase()
+
+/** 0 = name starts with the query, 1 = some word does, 2 = only contains it. */
+const rank = (name: string, q: string) => (norm(name).startsWith(q) ? 0 : norm(name).split(' ').some((w) => w.startsWith(q.split(' ')[0])) ? 1 : 2)
+
+/** Meal by clock: before 11 فطار, before 17 غدا, before 22 عشا, else سناك. */
+export const mealNow = (h = new Date().getHours()): Meal => (h < 4 ? 'سناك' : h < 11 ? 'فطار' : h < 17 ? 'غدا' : h < 22 ? 'عشا' : 'سناك')
+
+/** Typing searches the local food table instantly; the arrow sends free text to Gemini. */
 function QuickBar({ date }: { date: string }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState<Item | null>(null)
+  const customs = useLiveQuery(() => db.customFoods.toArray()) ?? []
+
+  const q = norm(text.trim())
+  const matches = q.length < 2 ? [] : [
+    ...customs.map((c) => ({ id: null, name: c.name, per100: c.per100, oily: false })),
+    ...Object.values(FOODS).map((f) => ({ id: f.id, name: f.name, per100: f as Macros, oily: f.oily })),
+  ].filter((f) => q.split(/\s+/).every((w) => norm(f.name).includes(w)))
+    // word-start matches first: "بيض" → eggs before "رز أبيض"
+    .sort((a, b) => rank(a.name, q) - rank(b.name, q))
+    .slice(0, 6)
+
+  const pick = (f: (typeof matches)[number]) => {
+    const per100 = { kcal: f.per100.kcal, p: f.per100.p, c: f.per100.c, f: f.per100.f }
+    setDraft(makeItem(date, mealNow(), f.name, f.id, 100, per100, f.oily, false))
+  }
   const send = async () => {
     const v = text.trim()
     if (!v || busy) return
@@ -150,10 +176,26 @@ function QuickBar({ date }: { date: string }) {
     }
   }
   return (
-    <form className="glass flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send() }}>
-      <Sparkles size={18} className={`shrink-0 text-purple ${busy ? 'animate-pulse' : ''}`} />
-      <input className="min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-ink-3" placeholder="كلت إيه؟ مثلاً: 2 بيض ورغيف بلدي" value={text} onChange={(e) => setText(e.target.value)} disabled={busy} aria-label="سجل أكل" />
-      <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-blue text-white disabled:opacity-30" disabled={!text.trim() || busy} aria-label="سجل"><ArrowUp size={20} /></button>
-    </form>
+    <div className="relative">
+      <form className="glass flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send() }}>
+        <Sparkles size={18} className={`shrink-0 text-purple ${busy ? 'animate-pulse' : ''}`} />
+        <input className="min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-ink-3" placeholder={busy ? 'Gemini بيسجل…' : 'دوّر على أكلة، أو اكتب جملة وابعت'} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} aria-label="سجل أكل" />
+        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-blue text-white disabled:opacity-30" disabled={!text.trim() || busy} aria-label="ابعت لـ Gemini"><ArrowUp size={20} /></button>
+      </form>
+      {matches.length > 0 && !busy && (
+        <ul className="glass pop-enter absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl" role="listbox" aria-label="أكلات">
+          {matches.map((f) => (
+            <li key={f.id ?? `u:${f.name}`}>
+              <button className="press flex w-full items-center justify-between border-b border-hair px-4 py-2.5 text-start last:border-0" onClick={() => pick(f)}>
+                <span className="truncate">{f.name}{!f.id && <span className="ms-2 text-[12px] text-purple">أكلك</span>}</span>
+                <span className="num shrink-0 text-[13px] text-ink-3">{f.per100.kcal}/100ج</span>
+              </button>
+            </li>
+          ))}
+          <li className="px-4 py-2 text-[12px] text-ink-3">مش لاقيها؟ دوس ↑ و Gemini يفهمها</li>
+        </ul>
+      )}
+      {draft && <EditItem item={draft} onClose={() => { setDraft(null); setText('') }} />}
+    </div>
   )
 }

@@ -22,10 +22,12 @@ export function EditItem({ item, onClose }: { item: Item; onClose: () => void })
     if (per100.kcal > 950) return toast('مفيش أكل أكتر من 950 سعر في 100 جرام')
     const learned = per100Changed || item.estimated
     await db.transaction('rw', db.items, db.customFoods, async () => {
-      await db.items.update(item.id!, { name, meal, grams: g, per100, margin, estimated: false, ...total })
+      const fields = { name, meal, grams: g, per100, margin, estimated: false, ...total }
+      if (item.id) await db.items.update(item.id, fields)
+      else await db.items.add({ ...item, ...fields, ts: Date.now() })
       if (learned) await db.customFoods.put({ name: name.trim(), per100 })
     })
-    toast(learned ? `💾 "${name}" اتحفظ في أكلك` : '✅ اتعدل')
+    toast(learned ? `💾 "${name}" اتحفظ في أكلك` : item.id ? '✅ اتعدل' : `✅ ${name} · ${total.kcal} سعر`)
     onClose()
   }
   const again = async () => {
@@ -47,7 +49,7 @@ export function EditItem({ item, onClose }: { item: Item; onClose: () => void })
   )
 
   return (
-    <Sheet title="تعديل" onClose={onClose}>
+    <Sheet title={item.id ? 'تعديل' : 'إضافة'} onClose={onClose}>
       <input className="field mb-3 text-[17px] font-medium" value={name} onChange={(e) => setName(e.target.value)} aria-label="الاسم" />
       <div className="mb-3 flex gap-2" role="radiogroup" aria-label="الوجبة">
         {MEALS.map((m) => (
@@ -55,7 +57,12 @@ export function EditItem({ item, onClose }: { item: Item; onClose: () => void })
         ))}
       </div>
       <label className="label">الكمية (جرام / مل)</label>
-      <input className="field num mb-4 mt-1 text-[24px]" inputMode="decimal" value={grams} onChange={(e) => setGrams(e.target.value)} />
+      <input className="field num mb-2 mt-1 text-[24px]" inputMode="decimal" value={grams} onChange={(e) => setGrams(e.target.value)} autoFocus={!item.id} onFocus={(e) => e.target.select()} />
+      <div className="mb-4 flex gap-2">
+        {[50, 100, 150, 200, 300].map((n) => (
+          <button key={n} className={`press num flex-1 rounded-lg py-1.5 text-[14px] ${g === n ? 'bg-blue text-white' : 'bg-fill text-ink-2'}`} onClick={() => setGrams(String(n))}>{n}</button>
+        ))}
+      </div>
 
       <p className="label mb-1">لكل 100 جرام {item.estimated && <span className="text-amber">· تقديري من Gemini، صححه لو تعرف</span>}</p>
       <div className="mb-3 flex gap-2">{num('kcal', 'سعرات')}{num('p', 'بروتين')}{num('c', 'كارب')}{num('f', 'دهون')}</div>
@@ -72,8 +79,8 @@ export function EditItem({ item, onClose }: { item: Item; onClose: () => void })
 
       <div className="flex gap-2">
         <button className="press flex-1 rounded-2xl bg-blue text-white py-3 font-semibold" onClick={save}>حفظ</button>
-        <button className="press rounded-2xl bg-fill px-4 text-blue" onClick={again} aria-label="سجله تاني النهارده"><Repeat size={20} /></button>
-        <button className="press rounded-2xl bg-red/15 px-4 text-red" onClick={remove} aria-label="مسح"><Trash2 size={20} /></button>
+        {item.id && <button className="press rounded-2xl bg-fill px-4 text-blue" onClick={again} aria-label="سجله تاني النهارده"><Repeat size={20} /></button>}
+        {item.id && <button className="press rounded-2xl bg-red/15 px-4 text-red" onClick={remove} aria-label="مسح"><Trash2 size={20} /></button>}
       </div>
     </Sheet>
   )
