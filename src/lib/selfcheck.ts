@@ -36,6 +36,7 @@ assert.deepEqual(thinkingFor('gemini-3.5-flash'), { thinkingLevel: 'low' })
 assert.deepEqual(thinkingFor('gemini-flash-latest'), { thinkingLevel: 'low' })
 assert.deepEqual(thinkingFor('gemini-2.5-flash'), { thinkingBudget: 0 })
 assert.equal(thinkingFor('gemini-2.0-flash'), undefined)
+assert.deepEqual(thinkingFor('gemini-3.1-flash-lite'), { thinkingLevel: 'minimal' })
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

@@ -18,7 +18,7 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
   const save = async () => {
     // theme + lastBackup can change while the sheet is open; don't overwrite them with the stale form copy
     const { theme: _t, lastBackup: _b, ...rest } = form
-    await saveSettings({ ...rest, apiKey: form.apiKey.trim(), model: form.model.trim() || 'gemini-flash-latest' })
+    await saveSettings({ ...rest, apiKey: form.apiKey.trim(), model: form.model.trim() || 'gemini-flash-lite-latest' })
     toast('✅ اتحفظ')
     onClose()
   }
@@ -136,6 +136,9 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
           </div>
         ))}
       </Group>
+      <p className="pb-2 text-center text-[12px] text-ink-3">
+        Mini's Coach <span className="num">v{__APP_VERSION__}</span> · {new Date(__BUILD_TIME__).toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+      </p>
     </Sheet>
   )
 }

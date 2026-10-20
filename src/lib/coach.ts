@@ -187,7 +187,7 @@ export async function callGemini(userText: string): Promise<GeminiReply> {
 /** Thinking makes Flash slow; parsing food doesn't need it. Gemini 3+ takes a level, 2.x a token budget. */
 export function thinkingFor(model: string): object | undefined {
   const v = Number(model.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1])
-  if (v >= 3 || model.includes('latest')) return { thinkingLevel: 'low' }
+  if (v >= 3 || model.includes('latest')) return { thinkingLevel: model.includes('lite') ? 'minimal' : 'low' }
   if (v >= 2.5) return { thinkingBudget: 0 }
   return undefined
 }
@@ -221,17 +221,23 @@ async function apiError(res: Response): Promise<Error> {
   return new Error(`Gemini ${res.status}`)
 }
 
-/** Newest stable "gemini-X.Y-flash" the key can call; falls back to the auto-updating alias. */
+/** Fastest usable model: newest stable Flash-Lite, then Flash, then the auto-updating aliases. */
 export async function pickModel(key: string): Promise<string> {
   const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', { headers: { 'x-goog-api-key': key } })
   if (!res.ok) throw await apiError(res)
   const { models = [] } = (await res.json()) as { models?: { name: string; supportedGenerationMethods?: string[] }[] }
   const names = models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name.replace(/^models\//, ''))
-  const flash = names
-    .map((n) => ({ n, v: n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)?.[1] }))
-    .filter((x) => x.v)
-    .sort((a, b) => Number(b.v) - Number(a.v))
-  const pick = flash[0]?.n ?? names.find((n) => n === 'gemini-flash-latest') ?? names.find((n) => n.includes('flash'))
+  const newest = (re: RegExp) =>
+    names
+      .map((n) => ({ n, v: n.match(re)?.[1] }))
+      .filter((x) => x.v)
+      .sort((a, b) => Number(b.v) - Number(a.v))[0]?.n
+  const pick =
+    newest(/^gemini-(\d+(?:\.\d+)?)-flash-lite$/) ??
+    newest(/^gemini-(\d+(?:\.\d+)?)-flash$/) ??
+    names.find((n) => n === 'gemini-flash-lite-latest') ??
+    names.find((n) => n === 'gemini-flash-latest') ??
+    names.find((n) => n.includes('flash'))
   if (!pick) throw new Error('مفيش موديل Flash متاح للمفتاح ده')
   return pick
 }

@@ -67,7 +67,7 @@ export interface Settings {
 }
 export const DEFAULTS: Settings = {
   apiKey: '',
-  model: 'gemini-flash-latest',
+  model: 'gemini-flash-lite-latest',
   goal: 1750,
   protein: 130,
   greenMax: 1850,
