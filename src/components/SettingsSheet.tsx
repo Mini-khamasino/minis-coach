@@ -4,7 +4,7 @@ import { CloudUpload, Download, Check } from 'lucide-react'
 import { db, saveSettings, ACCENTS, type Accent, type Settings } from '../lib/db.ts'
 import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.ts'
 import { targetsFor } from '../lib/calc.ts'
-import { signIn, logOut, type SyncState } from '../lib/sync.ts'
+import { signIn, logOut, type SyncState } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
 import { Sheet, Seg, toast } from './ui.tsx'
 

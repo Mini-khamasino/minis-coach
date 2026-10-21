@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip } from 'chart.js'
 import { Plus } from 'lucide-react'
 import { db, today, type Settings } from '../lib/db.ts'
 import { addDays, daysBetween, trajectory, adaptiveTdee, mifflin, weightTrend } from '../lib/calc.ts'
 import { Sheet, toast } from './ui.tsx'
 import { L, lang } from '../lib/i18n.ts'
 
-Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip)
 
 export function WeightCard({ s, theme }: { s: Settings; theme: string }) {
   const weights = useLiveQuery(() => db.weights.orderBy('date').toArray()) ?? []
@@ -39,50 +37,58 @@ export function WeightCard({ s, theme }: { s: Settings; theme: string }) {
     const muted = css.getPropertyValue('--color-ink-3').trim()
     const hair = css.getPropertyValue('--color-hair').trim()
     const accent = css.getPropertyValue('--color-teal').trim()
-    const chart = new Chart(canvas.current, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: L('المتوسط', 'Trend'),
-            data: labels.map((d) => trend.get(d) ?? null),
-            borderColor: accent,
-            spanGaps: true,
-            tension: 0.35,
-            pointRadius: 0,
-            borderWidth: 2.5,
-          },
-          {
-            label: L('الميزان', 'Scale'),
-            data: labels.map((d) => byDate.get(d) ?? null),
-            borderColor: 'transparent',
-            pointRadius: 3,
-            pointBackgroundColor: muted,
-            showLine: false,
-          },
-          {
-            label: L('المسار', 'Plan'),
-            data: labels.map((d) => trajectory(s.startDate, s.startKg, s.targetKg, s.ratePerWeek, d)),
-            borderColor: muted,
-            borderDash: [5, 5],
-            pointRadius: 0,
-            borderWidth: 1.5,
-          },
-        ],
-      },
-      options: {
-        animation: reduce ? false : { duration: 600, easing: 'easeOutQuart' },
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: { tooltip: { rtl: lang === 'ar', displayColors: false } },
-        scales: {
-          x: { ticks: { color: muted, maxTicksLimit: 5, callback: (_, i) => labels[i].slice(5) }, grid: { display: false } },
-          y: { position: lang === 'ar' ? 'right' : 'left', ticks: { color: muted, maxTicksLimit: 4 }, grid: { color: hair } },
+    // chart.js loads only when the chart is drawn
+    let chart: { destroy(): void } | undefined
+    let alive = true
+    const el = canvas.current
+    import('chart.js').then(({ Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip }) => {
+      if (!alive) return
+      Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip)
+      chart = new Chart(el, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: L('المتوسط', 'Trend'),
+              data: labels.map((d) => trend.get(d) ?? null),
+              borderColor: accent,
+              spanGaps: true,
+              tension: 0.35,
+              pointRadius: 0,
+              borderWidth: 2.5,
+            },
+            {
+              label: L('الميزان', 'Scale'),
+              data: labels.map((d) => byDate.get(d) ?? null),
+              borderColor: 'transparent',
+              pointRadius: 3,
+              pointBackgroundColor: muted,
+              showLine: false,
+            },
+            {
+              label: L('المسار', 'Plan'),
+              data: labels.map((d) => trajectory(s.startDate, s.startKg, s.targetKg, s.ratePerWeek, d)),
+              borderColor: muted,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              borderWidth: 1.5,
+            },
+          ],
         },
-      },
+        options: {
+          animation: reduce ? false : { duration: 600, easing: 'easeOutQuart' },
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { rtl: lang === 'ar', displayColors: false } },
+          scales: {
+            x: { ticks: { color: muted, maxTicksLimit: 5, callback: (_, i) => labels[i].slice(5) }, grid: { display: false } },
+            y: { position: lang === 'ar' ? 'right' : 'left', ticks: { color: muted, maxTicksLimit: 4 }, grid: { color: hair } },
+          },
+        },
+      })
     })
-    return () => chart.destroy()
+    return () => { alive = false; chart?.destroy() }
   }, [weights, s.startDate, s.startKg, s.targetKg, s.ratePerWeek, last, theme])
 
   return (

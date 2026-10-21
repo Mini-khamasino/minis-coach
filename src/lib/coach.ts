@@ -1,6 +1,7 @@
 // The coach: rules over the person's own data → messages through the day. No AI, works offline.
 import { db, getSettings, today, type CoachMessage, type Item, type Settings, type Workout } from './db.ts'
-import { addDays, sum, weightTrend, adaptiveTdee, daysBetween } from './calc.ts'
+import { addDays, sum, compute, weightTrend, adaptiveTdee, daysBetween } from './calc.ts'
+import { parse, norm, type Candidate, type ParserMemory } from './parser.ts'
 import { PROGRAMS, suggestProgram, exName, workoutKcal } from './exercises.ts'
 import { nextDayIndex, weeklySets, personalRecords } from './training.ts'
 import { L, lang } from './i18n.ts'
@@ -307,3 +308,125 @@ ${question.trim() ? `## My question\n${question.trim()}` : '## What I want\nRevi
 }
 
 export const markAiShared = () => db.kv.put({ key: 'lastAiShare', value: Date.now() })
+
+// ── Ask the coach: typed questions answered from the person's numbers; anything else gets an honest "I don't know" ──
+
+export interface AskCtx { s: Settings; todayItems: Item[]; waterToday: number; weights: { date: string; kg: number }[]; workouts: Workout[]; customs: Candidate[]; mem: ParserMemory }
+
+// words that frame a question, stripped before looking for a food in it
+const FRAME = new Set('ينفع اقدر ممكن هل اكل ناكل كلت كام سعر سعره سعرات كالوري فيها فيه في يا كوتش لو انا عايز عاوز النهارده دلوقتي ده دي can i eat have how many much calories calorie cal kcal in a an is it ok okay should the of today now'.split(' '))
+
+const STATUS = new Set('بروتين بروتيني بروتينك protein my مية ميه مياه ماء water وزن وزني weight'.split(' '))
+
+const IDEAS: [string, string, number, number][] = [
+  ['200ج صدور فراخ مشوية + سلطة', '200 g grilled chicken breast + salad', 360, 62],
+  ['علبة تونة بالمية + رغيف عيش', 'Can of tuna in water + a pita', 360, 38],
+  ['3 بيض مسلوق + خيار وطماطم', '3 boiled eggs + cucumber & tomato', 260, 20],
+  ['زبادي يوناني + موزة', 'Greek yogurt + a banana', 270, 17],
+  ['150ج كفتة مشوية + سلطة', '150 g grilled kofta + salad', 450, 27],
+  ['شاورما فراخ من غير عيش + سلطة', 'Chicken shawarma, no bread + salad', 430, 45],
+  ['طبق فول بالزيت + رغيف', 'Plate of foul with oil + a loaf', 600, 26],
+  ['جبنة قريش 200ج + خيار + نص رغيف', '200 g cottage cheese + cucumber + half a pita', 330, 27],
+  ['سكوب بروتين بالمية', 'Protein shake with water', 120, 24],
+]
+
+export function answer(q: string, c: AskCtx): string {
+  const { s } = c
+  const n = norm(q)
+  const t = sum(c.todayItems)
+  const left = s.goal - t.kcal
+  const proteinLeft = Math.max(0, Math.round(s.protein - t.p))
+  const has = (re: RegExp) => re.test(n)
+
+  // is there a food in the question?
+  const words = n.split(' ').filter((w) => !FRAME.has(w))
+  // "بروتيني كام؟" asks about *my* protein, not the protein-powder food
+  const aboutMe = words.length > 0 && words.every((w) => STATUS.has(w))
+  const stripped = aboutMe ? '' : words.join(' ')
+  const line = stripped ? parse(stripped, c.customs, c.mem)[0] : undefined
+  const food = line?.match && line.score >= 60 ? line : undefined
+  const k = food ? compute(food.match!.per100, food.grams, food.match!.oily) : null
+
+  if (food && k && has(/ينفع|اقدر|ممكن|can i|should i|ok to|is it ok/)) {
+    const what = `${food.match!.name} (${food.grams}${L('ج', ' g')}) = ${k.kcal} ${L('سعر', 'kcal')}`
+    if (k.kcal <= left) return L(`أيوه 👍 ${what}، وهيفضلك ${left - k.kcal}.`, `Yes 👍 ${what}, leaving you ${left - k.kcal}.`)
+    const over = k.kcal - Math.max(0, left)
+    if (t.kcal + k.kcal <= s.maintenance) return L(`${what}. هتعدي هدفك بـ ${over} بس لسه تحت الصيانة — ينفع، أو خد نص الكمية (${Math.round(k.kcal / 2)}).`, `${what}. You'd go ${over} over target but stay under maintenance — fine, or have half (${Math.round(k.kcal / 2)}).`)
+    const past = t.kcal + k.kcal - s.maintenance
+    return L(`${what}. ده هيعدّي الصيانة بـ ${past}. لو نفسك فيها خد ربع الكمية، أو خليها بكره في وجبة محسوبة.`, `${what}. That puts you ${past} over maintenance. Have a quarter, or plan it into tomorrow.`)
+  }
+  if (food && k) {
+    const p = food.match!.per100
+    return L(
+      `${food.match!.name} — ${food.grams}ج: ${k.kcal} سعر · بروتين ${k.p}ج · كارب ${k.c}ج · دهون ${k.f}ج\n(لكل 100ج: ${p.kcal} سعر)`,
+      `${food.match!.name} — ${food.grams} g: ${k.kcal} kcal · protein ${k.p} g · carbs ${k.c} g · fat ${k.f} g\n(per 100 g: ${p.kcal} kcal)`,
+    )
+  }
+  if (has(/(اكل|ناكل|اتعشي|افطر|اتغدي|اخد) (ايه|اي)|اقترح|what (should|to|can) i eat|suggest|ideas?/)) {
+    if (left < 150) return L('فاضلك أقل من 150 — خليها خيار، شاي من غير سكر، أو زبادي لايت 💚', 'Under 150 left — cucumber, unsweetened tea, or a light yogurt 💚')
+    const picks = IDEAS.filter(([, , kc]) => kc <= left + 50).sort((a, b) => b[3] - a[3]).slice(0, 3)
+    return L(
+      `فاضلك ${left} سعر و${proteinLeft}ج بروتين. أفكار:\n${picks.map(([ar, , kc, p]) => `• ${ar} (~${kc}، ${p}ج بروتين)`).join('\n')}`,
+      `${left} kcal and ${proteinLeft} g protein left. Ideas:\n${picks.map(([, en, kc, p]) => `• ${en} (~${kc}, ${p} g protein)`).join('\n')}`,
+    )
+  }
+  if (has(/فاضل|باقي|left|remaining/)) {
+    if (left >= 0) return L(`فاضلك ${left} سعر و${proteinLeft}ج بروتين النهارده.`, `${left} kcal and ${proteinLeft} g protein left today.`)
+    const under = t.kcal <= s.maintenance
+    return L(`عديت هدفك بـ ${-left}. الصيانة ${s.maintenance} — ${under ? 'لسه تحتها 👌' : 'عديتها، بكره نرجع للخطة'}.`, `${-left} over target. Maintenance is ${s.maintenance} — ${under ? 'still under it 👌' : 'over it; back to plan tomorrow'}.`)
+  }
+  if (has(/بروتين|protein/)) {
+    return L(`بروتينك ${Math.round(t.p)} من ${s.protein}ج. ${t.p < s.protein ? `أسهل حاجات تكمل بيها: ${PROTEIN_IDEAS()}.` : 'كفاية النهارده 💪'}`,
+      `Protein ${Math.round(t.p)} of ${s.protein} g. ${t.p < s.protein ? `Easiest ways to finish: ${PROTEIN_IDEAS()}.` : 'Done for today 💪'}`)
+  }
+  if (has(/مي[هة]|ماء|water/)) {
+    const drunk = (c.waterToday / 1000).toFixed(2), togo = ((s.waterGoal - c.waterToday) / 1000).toFixed(2)
+    return L(`شربت ${drunk} من ${s.waterGoal / 1000} لتر. ${c.waterToday < s.waterGoal ? `فاضل ${togo} لتر.` : 'تمام 💧'}`, `${drunk} of ${s.waterGoal / 1000} L. ${c.waterToday < s.waterGoal ? `${togo} L to go.` : 'Done 💧'}`)
+  }
+  if (has(/تمرين|اتمرن|جيم|عضل|workout|train|gym|exercise/)) {
+    const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+    const day = program.days[nextDayIndex(c.workouts, program)]
+    const list = day.slots.map(([id, sets, reps]) => `• ${exName(id)} ${sets}×${reps}`).join('\n')
+    return L(`التمرين الجاي: ${day.ar}\n${list}`, `Next workout: ${day.en}\n${list}`)
+  }
+  if (has(/وزن|weight|نزلت|خسيت|زدت|تخنت/)) {
+    const last = c.weights.at(-1)
+    if (!last) return L('لسه مفيش وزن متسجل — اوزن نفسك الصبح وسجله.', 'No weigh-ins yet — weigh in tomorrow morning.')
+    const now = weightTrend(c.weights).get(last.date)!
+    const since = (now - s.startKg > 0 ? '+' : '') + (now - s.startKg).toFixed(1)
+    const togo = Math.abs(now - s.targetKg).toFixed(1)
+    return L(`متوسط وزنك ${now} كجم (الميزان ${last.kg}). اتغير ${since} من البداية، وفاضل ${togo} للهدف.`, `Trend weight ${now} kg (scale ${last.kg}). ${since} since start, ${togo} to target.`)
+  }
+  if (has(/المفروض|هدف|محتاج|target|goal|how much|في اليوم|per day|a day/)) {
+    return L(`هدفك ${s.goal} سعر في اليوم و${s.protein}ج بروتين و${s.waterGoal / 1000} لتر مية. الصيانة ${s.maintenance}؛ تقدر تعيد الحساب من الإعدادات.`,
+      `Your target is ${s.goal} kcal/day, ${s.protein} g protein and ${s.waterGoal / 1000} L water. Maintenance is ${s.maintenance}; recalculate in Settings.`)
+  }
+  return L(
+    'معرفش 🤷 أنا بفهم أسئلة زي:\n• ينفع آكل كنافة؟\n• كام سعر في طبق كبسة؟\n• فاضلي كام؟ / بروتيني كام؟\n• آكل إيه على العشا؟\n• أتمرن إيه؟ / وزني عامل إيه؟\nلأي حاجة تانية استخدم زرار "شات جديد" مع الـ AI.',
+    "I don't know 🤷 I understand questions like:\n• Can I eat kunafa?\n• How many calories in a plate of kabsa?\n• What's left today? / How's my protein?\n• What should I eat for dinner?\n• What's my workout? / How's my weight?\nFor anything else, use \"New AI chat\".",
+  )
+}
+
+/** Store the question and the coach's answer in the feed. */
+export async function ask(question: string) {
+  const s = await getSettings()
+  const d = today()
+  const [todayItems, water, weights, workouts, customs, memRow] = await Promise.all([
+    db.items.where('date').equals(d).toArray(),
+    db.water.where('date').equals(d).toArray(),
+    db.weights.orderBy('date').toArray(),
+    db.workouts.toArray(),
+    db.customFoods.toArray(),
+    db.kv.get('parserMemory'),
+  ])
+  const text = answer(question, {
+    s, todayItems, waterToday: water.reduce((a, w) => a + w.ml, 0), weights, workouts,
+    customs: customs.map((f) => ({ key: `u:${f.name}`, name: f.name, per100: f.per100, oily: false, foodId: null })),
+    mem: (memRow?.value as ParserMemory | undefined) ?? { phrases: {}, portions: {} },
+  })
+  const ts = Date.now()
+  await db.messages.bulkAdd([
+    { key: `ask:${ts}`, kind: 'ask', date: d, ts, text: question.trim(), read: true },
+    { key: `answer:${ts}`, kind: 'answer', date: d, ts: ts + 1, text, read: true },
+  ])
+}

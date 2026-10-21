@@ -91,7 +91,7 @@ export function Food({ s }: { s: Settings }) {
 }
 
 const Chip = ({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) => (
-  <button className="press glass flex items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[13px] font-medium" onClick={onClick}>{icon}{label}</button>
+  <button className="press surface flex items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[13px] font-medium" onClick={onClick}>{icon}{label}</button>
 )
 
 type Line = ParsedLine & { edited?: boolean; picked?: boolean }
@@ -135,7 +135,7 @@ function SmartAdd({ date }: { date: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="glass flex items-center gap-2 rounded-[22px] px-4 py-1.5">
+      <div className="surface flex items-center gap-2 rounded-[22px] px-4 py-1.5">
         <Sparkles size={18} className="shrink-0 text-accent" />
         <input className="min-w-0 flex-1 bg-transparent py-2.5 outline-none placeholder:text-ink-3" placeholder={L('كلت إيه؟ "2 بيض ورغيف وكوباية شاي"', 'What did you eat? "2 eggs, a pita and tea"')}
           value={text} onChange={(e) => onText(e.target.value)} aria-label={L('اكتب أكلك', 'Type your food')} enterKeyHint="done"

@@ -5,7 +5,7 @@ import { FOODS } from './foods.ts'
 import { parse, search } from './parser.ts'
 import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
-import { generate, advice } from './coach.ts'
+import { generate, advice, answer } from './coach.ts'
 import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
@@ -109,6 +109,19 @@ const sweetNights = ['2026-10-16', '2026-10-18', '2026-10-20'].map((d) => item(d
 assert.ok(kinds('2026-10-21T12:00:00', { items: sweetNights }).includes('sweets'))
 assert.ok(kinds('2026-10-22T17:00:00').includes('thursday')) // Oct 22 2026 is a Thursday
 assert.ok(advice('plan_feast', cs).includes('2500'))
+
+// ── ask the coach ──
+const actx = { s: cs, todayItems: [item('2026-10-21', 13, 'kabsa', 1000, 50)], waterToday: 1500, weights: [{ date: '2026-10-21', kg: 100 }], workouts: [], customs: [], mem }
+const A = (q: string) => answer(q, actx)
+assert.match(A('ينفع آكل 2 بيض؟'), /أيوه/) // 155 kcal fits in the 800 left
+assert.match(A('ينفع اكل طبق كبسة؟'), /الصيانة/) // a 450 g plate goes over goal but stays under maintenance
+assert.match(A('كام سعر في رغيف بلدي'), /221|220/)
+assert.match(A('فاضلي كام؟'), /800/)
+assert.match(A('بروتيني كام'), /50 من 150/)
+assert.match(A('آكل ايه على العشا؟'), /•/)
+assert.match(A('can I eat a slice of pizza?'), /Yes|أيوه/)
+assert.match(A('how much should I eat a day'), /1800/)
+assert.match(A('مين كسب الماتش امبارح؟'), /معرفش|don't know/) // off-topic → honest "I don't know"
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

@@ -10,6 +10,8 @@ export interface ParsedLine {
   match: Candidate | null
   alts: Candidate[]
   grams: number
+  /** match strength: 100 exact name, 80 prefix, lower = partial */
+  score: number
   /** w = grams were given (weighed), p = estimated from a portion/unit */
   acc: 'w' | 'p'
 }
@@ -167,7 +169,7 @@ export function parseLine(text: string, customs: Candidate[], mem: ParserMemory)
   else if (qty !== null) g = (serving ?? 100) * qty
   else g = (match && mem.portions[match.key]) || serving || 100
 
-  return { text, phrase, match, alts: ranked.slice(1, 5).map((x) => x.c), grams: Math.round(g), acc }
+  return { text, phrase, match, alts: ranked.slice(1, 5).map((x) => x.c), grams: Math.round(g), score: ranked[0]?.s ?? 0, acc }
 }
 
 /** Plain search for pickers. `raw` puts raw ingredients first (recipe builder). */

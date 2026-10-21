@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Sparkles, RefreshCw, Copy } from 'lucide-react'
+import { Sparkles, RefreshCw, Copy, ArrowUp } from 'lucide-react'
 import { db, type CoachMessage } from '../lib/db.ts'
-import { pickReply, react, aiPrompt, markAiShared } from '../lib/coach.ts'
+import { pickReply, react, aiPrompt, markAiShared, ask } from '../lib/coach.ts'
 import { L, locale } from '../lib/i18n.ts'
 import { Sheet, toast } from './ui.tsx'
 
 const REACTIONS = ['👍', '❤️', '😅', '💪', '👎']
 
-/** The coach writes; the person reacts or taps a quick reply. Newest first. */
+/** The coach writes; the person reacts, taps a quick reply, or asks a question. Reads top-to-bottom like a chat. */
 export function Coach({ visible }: { visible: boolean }) {
-  const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray()) ?? []
+  const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray().then((a) => a.reverse())) ?? []
+  const [q, setQ] = useState('')
+  const end = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length])
+  const send = () => { if (q.trim()) { ask(q); setQ('') } }
   const lastShare = useLiveQuery(() => db.kv.get('lastAiShare'))?.value as number | undefined
   const [ai, setAi] = useState<'full' | 'update' | null>(null)
 
@@ -51,15 +55,25 @@ export function Coach({ visible }: { visible: boolean }) {
         )
       })}
 
+      <div ref={end} />
+      <form className="glass sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send() }}>
+        <input className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-ink-3" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder={L('اسأل الكوتش… ينفع آكل كنافة؟', 'Ask the coach… can I eat kunafa?')} aria-label={L('اسأل الكوتش', 'Ask the coach')} enterKeyHint="send" />
+        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim()} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
+      </form>
+
       {ai && <AiSheet mode={ai} onClose={() => setAi(null)} />}
     </div>
   )
 }
 
 function Bubble({ m }: { m: CoachMessage }) {
-  const isReply = m.kind === 'reply'
+  if (m.kind === 'ask') {
+    return <p className="pop-enter w-fit ms-auto max-w-[80%] rounded-[20px] rounded-ee-md bg-accent px-3.5 py-2 text-[15px] text-white">{m.text}</p>
+  }
+  const isReply = m.kind === 'reply' || m.kind === 'answer'
   return (
-    <article className={`pop-enter glass rounded-[22px] p-3.5 ${isReply ? 'ms-6' : ''}`}>
+    <article className={`pop-enter surface rounded-[22px] p-3.5 ${isReply ? 'ms-6' : ''}`}>
       <p className="mb-1 text-[11px] text-ink-3">{isReply ? '↳ ' : '🧠 '}{new Date(m.ts).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}</p>
       <p className="text-[15px] leading-relaxed whitespace-pre-line">{m.text}</p>
       {m.replies && (

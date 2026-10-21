@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
 import { db, getSettings, DEFAULTS } from './lib/db.ts'
-import { useSync } from './lib/sync.ts'
+import { useSync } from './lib/syncCore.ts'
 import { runCoach } from './lib/coach.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
-import { Food } from './components/Food.tsx'
-import { Exercise } from './components/Exercise.tsx'
-import { Coach } from './components/Coach.tsx'
+// tabs other than Today load on first visit, so the app opens fast
+const Food = lazy(() => import('./components/Food.tsx').then((m) => ({ default: m.Food })))
+const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ default: m.Exercise })))
+const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { SettingsSheet } from './components/SettingsSheet.tsx'
 import { Toaster, UpdatePrompt } from './components/ui.tsx'
@@ -26,6 +27,7 @@ export default function App() {
   const s = boot?.s ?? DEFAULTS
   const sync = useSync()
   const [tab, setTab] = useState<Tab>('today')
+  const [seen, setSeen] = useState<Set<Tab>>(() => new Set(['today']))
   const [settings, setSettings] = useState(false)
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? 'dark')
   const [compact, setCompact] = useState(false)
@@ -36,7 +38,7 @@ export default function App() {
       const t = s.theme === 'system' ? (mq.matches ? 'light' : 'dark') : s.theme
       document.documentElement.dataset.theme = t
       document.documentElement.dataset.accent = s.accent
-      document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'light' ? '#ECECF0' : '#09090B')
+      document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'light' ? '#EBEBF0' : '#000000')
       try { localStorage.setItem('theme', s.theme); localStorage.setItem('accent', s.accent) } catch { /* private mode */ }
       setTheme(t)
     }
@@ -67,7 +69,7 @@ export default function App() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', run) }
   }, [boot?.s.onboarded])
 
-  const go = (t: Tab) => { setTab(t); scrollTo({ top: 0 }) }
+  const go = (t: Tab) => { setTab(t); setSeen((s) => new Set(s).add(t)); scrollTo({ top: 0 }) }
 
   if (!boot) return null
   // A backup restore or cloud download counts as onboarded; so does an older install that already has food logged.
@@ -99,16 +101,21 @@ export default function App() {
 
       <main>
         <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>
-        <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>
-        <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>
-        <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} /></div>
+        <Suspense fallback={<div className="card h-40 animate-pulse" />}>
+          {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>}
+          {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>}
+          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} /></div>}
+        </Suspense>
       </main>
 
       <nav className="glass fixed inset-x-0 bottom-[max(14px,env(safe-area-inset-bottom))] z-30 mx-auto flex rounded-full p-1.5"
         style={{ width: compact ? 'min(232px, calc(100% - 32px))' : 'min(400px, calc(100% - 24px))', transition: 'width 420ms var(--ease-spring)' }}
         aria-label={L('التبويبات', 'Tabs')}>
+        {/* the selection is one pill that glides between tabs on a spring */}
+        <span aria-hidden className="absolute top-1.5 bottom-1.5 rounded-full bg-fill"
+          style={{ width: 'calc((100% - 12px) / 4)', insetInlineStart: `calc(6px + ${TABS.findIndex((x) => x.id === tab)} * (100% - 12px) / 4)`, transition: 'inset-inline-start 460ms var(--ease-spring)' }} />
         {TABS.map(({ id, label, Icon }) => (
-          <button key={id} className={`press flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-2 ${tab === id ? 'bg-fill text-accent' : 'text-ink-2'}`}
+          <button key={id} className={`press relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-2 ${tab === id ? 'text-accent' : 'text-ink-2'}`}
             onClick={() => go(id)} aria-current={tab === id ? 'page' : undefined} aria-label={label}>
             <span className="relative">
               <Icon size={21} strokeWidth={tab === id ? 2.4 : 2} />

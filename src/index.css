@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #09090b;
-  --color-canvas-2: #121215;
+  --color-canvas: #000000;
+  --color-canvas-2: #000000;
+  --color-surface: #1c1c1e;
+  --color-raised: #2c2c2e;
   --color-ink: #f5f5f7;
   --color-ink-2: rgba(235, 235, 245, 0.6);
   --color-ink-3: rgba(235, 235, 245, 0.3);
@@ -21,16 +23,21 @@
 
 /* Soft light: grey canvas, no pure white glare. data-theme is set by App (system / dark / light). */
 :root {
-  --glass: rgba(28, 28, 32, 0.62);
-  --glass-solid: #1c1c20;
-  --glass-edge: rgba(255, 255, 255, 0.16); /* light catching the top rim */
-  --glass-sheen: rgba(255, 255, 255, 0.05);
-  --glass-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.55);
+  /* Liquid glass is only for the floating layer (tab bar, sheets, toasts, round buttons); content sits on solid surfaces. */
+  --glass: rgba(40, 40, 44, 0.72);
+  --glass-solid: #1c1c1e;
+  --glass-rim: rgba(255, 255, 255, 0.5);
+  --glass-rim-dim: rgba(255, 255, 255, 0.06);
+  --glass-sheen: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  --card-shadow: none;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-canvas: #ececf0;
-  --color-canvas-2: #e2e2e7;
+  --color-canvas: #ebebf0;
+  --color-canvas-2: #ebebf0;
+  --color-surface: #f8f8fa;
+  --color-raised: #ffffff;
   --color-ink: #1c1c1e;
   --color-ink-2: rgba(60, 60, 67, 0.68);
   --color-ink-3: rgba(60, 60, 67, 0.38);
@@ -42,11 +49,13 @@
   --color-blue: #007aff;
   --color-teal: #1f9fd0;
   --color-purple: #a24fd4;
-  --glass: rgba(250, 250, 252, 0.7);
-  --glass-solid: #f5f5f7;
-  --glass-edge: rgba(255, 255, 255, 0.95);
-  --glass-sheen: rgba(255, 255, 255, 0.35);
-  --glass-shadow: 0 12px 32px -14px rgba(30, 30, 60, 0.25);
+  --glass: rgba(252, 252, 253, 0.74);
+  --glass-solid: #f8f8fa;
+  --glass-rim: rgba(255, 255, 255, 1);
+  --glass-rim-dim: rgba(0, 0, 0, 0.06);
+  --glass-sheen: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 10px 30px -10px rgba(40, 40, 70, 0.28);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 10px -4px rgba(0, 0, 0, 0.06);
 }
 
 /* Accent picker: data-accent on <html>. Dark values first, then the deeper light-mode variants. */
@@ -75,7 +84,7 @@
   body {
     margin: 0;
     min-height: 100dvh;
-    background: linear-gradient(180deg, var(--color-canvas) 0%, var(--color-canvas-2) 100%) fixed;
+    background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     line-height: 1.55;
@@ -87,11 +96,15 @@
 }
 
 @utility glass {
-  background: linear-gradient(180deg, var(--glass-sheen), transparent 45%), var(--glass);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--color-hair);
-  box-shadow: inset 0 1px 0 0 var(--glass-edge), var(--glass-shadow);
+  /* thick tint for legibility + a light-catching rim that fades round the edge + a soft top sheen */
+  border: 1px solid transparent;
+  background:
+    radial-gradient(120% 90% at 25% 0%, var(--glass-sheen), transparent 55%) padding-box,
+    linear-gradient(var(--glass), var(--glass)) padding-box,
+    linear-gradient(150deg, var(--glass-rim), var(--glass-rim-dim) 35%, var(--glass-rim-dim) 65%, var(--glass-rim)) border-box;
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  box-shadow: inset 0 -10px 18px -12px rgba(0, 0, 0, 0.35), var(--glass-shadow);
   @media (prefers-reduced-transparency: reduce) {
     background: var(--glass-solid);
     backdrop-filter: none;
@@ -99,8 +112,16 @@
   }
 }
 
+@utility surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-hair);
+  box-shadow: var(--card-shadow);
+}
+
 @layer components {
-  .card { @apply glass rounded-[22px] p-4; }
+  .card { @apply surface rounded-[22px] p-4; }
+  /* selected segment / raised control: solid, not blurred */
+  .raised { background: var(--color-raised); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 0 0 0.5px var(--color-hair); }
 
   /* Feedback on press-down, spring back on release. */
   .press {

@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { db, saveSettings, today, type GoalType, type Sex } from '../lib/db.ts'
 import { targetsFor } from '../lib/calc.ts'
 import { restore } from '../lib/backup.ts'
-import { signIn } from '../lib/sync.ts'
+import { signIn } from '../lib/syncCore.ts'
 import { L, lang } from '../lib/i18n.ts'
 import { Seg, toast } from './ui.tsx'
 

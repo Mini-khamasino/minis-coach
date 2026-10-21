@@ -76,8 +76,8 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
       <div className="fade-enter absolute inset-0 bg-black/45" onClick={dismiss} />
-      <div ref={panel} className="glass sheet-enter relative max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-t-[30px] px-5 pb-[max(20px,env(safe-area-inset-bottom))]">
-        <div className="sticky top-0 z-10 -mx-5 touch-none px-5 pt-2 pb-3" style={{ background: 'linear-gradient(var(--glass-solid) 70%, transparent)' }}
+      <div ref={panel} className="surface sheet-enter relative !border-b-0 max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-t-[30px] px-5 pb-[max(20px,env(safe-area-inset-bottom))]">
+        <div className="sticky top-0 z-10 -mx-5 touch-none px-5 pt-2 pb-3" style={{ background: 'linear-gradient(var(--color-surface) 70%, transparent)' }}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
           <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-ink-3" />
           <div className="flex items-center justify-between">
@@ -152,7 +152,7 @@ export function Seg<T extends string>({ value, onChange, options }: { value: T; 
     <div className="flex w-full gap-1 rounded-xl bg-fill p-1" role="radiogroup">
       {options.map(([v, label]) => (
         <button key={v} role="radio" aria-checked={value === v} onClick={() => onChange(v)}
-          className={`press flex-1 rounded-lg py-2 text-[14px] ${value === v ? 'glass font-semibold' : 'text-ink-2'}`}>{label}</button>
+          className={`press flex-1 rounded-lg py-2 text-[14px] ${value === v ? 'raised font-semibold' : 'text-ink-2'}`}>{label}</button>
       ))}
     </div>
   )
