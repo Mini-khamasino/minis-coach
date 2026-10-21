@@ -1,7 +1,7 @@
 {
   "name": "minis-coach",
   "private": true,
-  "version": "2.0.0-alpha.3",
+  "version": "2.0.0-alpha.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,6 +17,7 @@
     "firebase": "^12.19.0",
     "lucide-react": "^1.48.0",
     "react": "^19.2.8",
+    "react-body-highlighter": "^2.0.5",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {

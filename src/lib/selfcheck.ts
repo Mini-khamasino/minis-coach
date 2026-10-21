@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { compute, sum, zone, mifflin, trajectory, adaptiveTdee, addDays, weightTrend, targetsFor } from './calc.ts'
 import { FOODS } from './foods.ts'
 import { parse, search } from './parser.ts'
+import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
+import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
 
 // plain item: 200 g rice at 130/100 → 260
 assert.deepEqual(compute(FOODS.rice, 200, false), { kcal: 260, p: 5.4, c: 56, f: 0.6 })
@@ -68,6 +70,25 @@ assert.equal(parse('كبسة ماما 300 جرام', [myKabsa], mem)[0].match?.k
 
 assert.equal(search('رز بسمتي', [], true)[0].key, 'raw_basmati') // recipe picker: raw first
 assert.equal(search('رز بسمتي', [])[0].key, 'basmati') // logging: cooked
+
+// ── training ──
+const ppl = PROGRAMS.find((p) => p.id === 'ppl')!
+const H = 3600_000, now0 = Date.parse('2026-10-21T18:00:00Z')
+const wk = (dayIndex: number, hoursAgo: number, exId: string, kg: number, reps: number, done = true) =>
+  ({ date: '2026-10-21', startedAt: now0 - hoursAgo * H, endedAt: now0 - hoursAgo * H + H, programId: 'ppl', dayIndex, exercises: [{ exId, sets: [{ kg, reps, done }] }] })
+assert.equal(nextDayIndex([], ppl), 0)
+assert.equal(nextDayIndex([wk(0, 50, 'bench', 60, 8), wk(1, 26, 'pullup', 0, 8)], ppl), 2) // after Pull comes Legs
+assert.equal(nextDayIndex([wk(2, 5, 'squat', 80, 5)], ppl), 0) // wraps around
+assert.deepEqual(recovering([wk(0, 50, 'bench', 60, 8), wk(2, 5, 'squat', 80, 5)], now0).sort(), ['adductor', 'gluteal', 'quadriceps'])
+assert.equal(weeklySets([wk(0, 50, 'bench', 60, 8), wk(0, 30, 'bench', 60, 8, false)], now0).get('chest'), 1) // unfinished sets don't count
+const prs = personalRecords([wk(0, 50, 'bench', 60, 10), wk(0, 5, 'bench', 70, 5)])
+assert.equal(prs.get('bench')!.kg, 70) // 70×5 (e1RM 81.7) beats 60×10 (e1RM 80)
+assert.equal(Math.round(e1rm(70, 5) * 10) / 10, 81.7)
+assert.equal(lastSets([wk(0, 50, 'bench', 60, 10), wk(0, 5, 'bench', 70, 5)], 'bench')[0].kg, 70)
+assert.equal(suggestProgram(4, 'gym').id, 'upper_lower')
+assert.equal(suggestProgram(6, 'gym').id, 'ppl')
+assert.equal(suggestProgram(3, 'home').id, 'home_full')
+assert.equal(workoutKcal(60, 80), 400)
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

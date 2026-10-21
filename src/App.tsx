@@ -89,7 +89,7 @@ export default function App() {
       <main>
         <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>
         <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>
-        <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise /></div>
+        <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>
         <div hidden={tab !== 'coach'} className="fade-enter"><Coach /></div>
       </main>
 

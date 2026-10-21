@@ -30,6 +30,16 @@ export interface RecipeIngredient { foodId: string; name: string; grams: number 
 export interface CustomFood { name: string; per100: Macros; recipe?: { ingredients: RecipeIngredient[]; cookedGrams: number } }
 export interface MealItem { name: string; foodId: string | null; per100: Macros; grams: number; margin: boolean; perServing?: boolean }
 export interface SavedMeal { id?: number; name: string; items: MealItem[] }
+export interface WorkoutSet { kg: number; reps: number; done: boolean }
+export interface Workout {
+  id?: number
+  date: string
+  startedAt: number
+  endedAt?: number
+  programId: string
+  dayIndex: number
+  exercises: { exId: string; sets: WorkoutSet[] }[]
+}
 interface KV { key: string; value: unknown }
 
 export const db = new Dexie('minis-coach') as Dexie & {
@@ -41,6 +51,7 @@ export const db = new Dexie('minis-coach') as Dexie & {
   customFoods: EntityTable<CustomFood, 'name'>
   kv: EntityTable<KV, 'key'>
   meals: EntityTable<SavedMeal, 'id'>
+  workouts: EntityTable<Workout, 'id'>
 }
 db.version(1).stores({
   items: '++id, date',
@@ -52,6 +63,7 @@ db.version(1).stores({
   kv: 'key',
 })
 db.version(2).stores({ meals: '++id' })
+db.version(3).stores({ workouts: '++id, date' })
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 
@@ -67,6 +79,9 @@ export interface Settings {
   activity: number
   goalType: GoalType
   trainDays: number
+  place: 'gym' | 'home'
+  programId: string
+  restSec: number
   lang: 'ar' | 'en'
   accent: Accent
   goal: number
@@ -91,6 +106,9 @@ export const DEFAULTS: Settings = {
   activity: 1.2,
   goalType: 'cut',
   trainDays: 3,
+  place: 'gym',
+  programId: '',
+  restSec: 90,
   lang: 'ar',
   accent: 'blue',
   goal: 1750,
