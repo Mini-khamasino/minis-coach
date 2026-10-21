@@ -1,6 +1,6 @@
 import { db, saveSettings, today } from './db.ts'
 
-const TABLES = ['items', 'water', 'weights', 'chat', 'notes', 'customFoods', 'kv', 'meals', 'workouts'] as const
+const TABLES = ['items', 'water', 'weights', 'chat', 'notes', 'customFoods', 'kv', 'meals', 'workouts', 'messages'] as const
 
 /** Build the backup ahead of the tap: Android only allows share() right after a user gesture. */
 export async function prepareBackup(): Promise<File> {

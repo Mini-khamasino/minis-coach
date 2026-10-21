@@ -30,6 +30,19 @@ export interface RecipeIngredient { foodId: string; name: string; grams: number 
 export interface CustomFood { name: string; per100: Macros; recipe?: { ingredients: RecipeIngredient[]; cookedGrams: number } }
 export interface MealItem { name: string; foodId: string | null; per100: Macros; grams: number; margin: boolean; perServing?: boolean }
 export interface SavedMeal { id?: number; name: string; items: MealItem[] }
+export interface CoachMessage {
+  id?: number
+  /** one message per rule per day, e.g. "protein:2026-10-21" */
+  key: string
+  kind: string
+  date: string
+  ts: number
+  text: string
+  replies?: { id: string; label: string }[]
+  picked?: string
+  reaction?: string
+  read: boolean
+}
 export interface WorkoutSet { kg: number; reps: number; done: boolean }
 export interface Workout {
   id?: number
@@ -52,6 +65,7 @@ export const db = new Dexie('minis-coach') as Dexie & {
   kv: EntityTable<KV, 'key'>
   meals: EntityTable<SavedMeal, 'id'>
   workouts: EntityTable<Workout, 'id'>
+  messages: EntityTable<CoachMessage, 'id'>
 }
 db.version(1).stores({
   items: '++id, date',
@@ -64,6 +78,7 @@ db.version(1).stores({
 })
 db.version(2).stores({ meals: '++id' })
 db.version(3).stores({ workouts: '++id, date' })
+db.version(4).stores({ messages: '++id, &key, date' })
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 

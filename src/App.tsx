@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
 import { db, getSettings, DEFAULTS } from './lib/db.ts'
 import { useSync } from './lib/sync.ts'
+import { runCoach } from './lib/coach.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 import { Food } from './components/Food.tsx'
@@ -56,6 +57,16 @@ export default function App() {
     return () => removeEventListener('scroll', on)
   }, [])
 
+  // the coach checks for due messages on open, on return to the app, and every 10 minutes
+  const unread = useLiveQuery(() => db.messages.filter((m) => !m.read).count()) ?? 0
+  useEffect(() => {
+    const run = () => document.visibilityState === 'visible' && runCoach().catch((e) => console.warn('coach', e))
+    run()
+    const t = setInterval(run, 10 * 60_000)
+    document.addEventListener('visibilitychange', run)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', run) }
+  }, [boot?.s.onboarded])
+
   const go = (t: Tab) => { setTab(t); scrollTo({ top: 0 }) }
 
   if (!boot) return null
@@ -90,7 +101,7 @@ export default function App() {
         <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>
         <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>
         <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>
-        <div hidden={tab !== 'coach'} className="fade-enter"><Coach /></div>
+        <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} /></div>
       </main>
 
       <nav className="glass fixed inset-x-0 bottom-[max(14px,env(safe-area-inset-bottom))] z-30 mx-auto flex rounded-full p-1.5"
@@ -99,7 +110,10 @@ export default function App() {
         {TABS.map(({ id, label, Icon }) => (
           <button key={id} className={`press flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-2 ${tab === id ? 'bg-fill text-accent' : 'text-ink-2'}`}
             onClick={() => go(id)} aria-current={tab === id ? 'page' : undefined} aria-label={label}>
-            <Icon size={21} strokeWidth={tab === id ? 2.4 : 2} />
+            <span className="relative">
+              <Icon size={21} strokeWidth={tab === id ? 2.4 : 2} />
+              {id === 'coach' && unread > 0 && tab !== 'coach' && <span className="absolute -top-0.5 -end-1 size-2.5 rounded-full bg-red ring-2 ring-[var(--glass-solid)]" aria-label={L(`${unread} رسالة جديدة`, `${unread} new`)} />}
+            </span>
             <span className="overflow-hidden text-[11px] font-medium" style={{ maxHeight: compact ? 0 : 16, opacity: compact ? 0 : 1, transition: 'max-height 300ms var(--ease-spring), opacity 200ms' }}>{label}</span>
           </button>
         ))}

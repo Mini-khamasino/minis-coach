@@ -5,6 +5,8 @@ import { FOODS } from './foods.ts'
 import { parse, search } from './parser.ts'
 import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
+import { generate, advice } from './coach.ts'
+import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
 assert.deepEqual(compute(FOODS.rice, 200, false), { kcal: 260, p: 5.4, c: 56, f: 0.6 })
@@ -89,6 +91,24 @@ assert.equal(suggestProgram(4, 'gym').id, 'upper_lower')
 assert.equal(suggestProgram(6, 'gym').id, 'ppl')
 assert.equal(suggestProgram(3, 'home').id, 'home_full')
 assert.equal(workoutKcal(60, 80), 400)
+
+// ── coach rules ──
+const cs = { ...DEFAULTS, onboarded: true, name: 'Mini', goal: 1800, protein: 150, greenMax: 1900, maintenance: 2500, waterGoal: 3000 }
+const at = (iso: string) => new Date(iso)
+const item = (date: string, hour: number, foodId: string, kcal: number, p = 0) => ({ date, ts: new Date(`${date}T${String(hour).padStart(2, '0')}:30:00`).getTime(), meal: 'سناك' as const, name: foodId, foodId, grams: 100, per100: { kcal, p, c: 0, f: 0 }, margin: false, estimated: false, kcal, p, c: 0, f: 0 })
+const base = { s: cs, items: [], waterToday: 0, weights: [], workouts: [], muted: {} }
+const kinds = (iso: string, extra = {}) => generate({ ...base, now: at(iso), ...extra }).map((m) => m.kind)
+assert.deepEqual(kinds('2026-10-21T08:00:00'), ['morning', 'plans'])
+assert.ok(kinds('2026-10-21T16:00:00').includes('protein')) // 0 g protein at 4pm
+assert.ok(!kinds('2026-10-21T16:00:00', { items: [item('2026-10-21', 13, 'chicken_breast', 500, 100)], waterToday: 2000 }).includes('protein'))
+assert.ok(kinds('2026-10-21T16:00:00').includes('water'))
+assert.ok(!kinds('2026-10-21T16:00:00', { muted: { water: Date.parse('2026-10-30') } }).includes('water')) // 👎 mutes for a week
+const eve = generate({ ...base, now: at('2026-10-21T20:00:00'), items: [item('2026-10-21', 13, 'kabsa', 2200, 80)] }).find((m) => m.kind === 'evening')!
+assert.match(eve.text, /الصيانة|maintenance/) // over goal but under maintenance → reassurance
+const sweetNights = ['2026-10-16', '2026-10-18', '2026-10-20'].map((d) => item(d, 23, 'konafa', 400))
+assert.ok(kinds('2026-10-21T12:00:00', { items: sweetNights }).includes('sweets'))
+assert.ok(kinds('2026-10-22T17:00:00').includes('thursday')) // Oct 22 2026 is a Thursday
+assert.ok(advice('plan_feast', cs).includes('2500'))
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)
