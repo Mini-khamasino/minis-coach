@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
 import { db, getSettings, DEFAULTS } from './lib/db.ts'
 import { useSync } from './lib/syncCore.ts'
-import { runCoach } from './lib/coach.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 // tabs other than Today load on first visit, so the app opens fast
@@ -62,7 +61,7 @@ export default function App() {
   // the coach checks for due messages on open, on return to the app, and every 10 minutes
   const unread = useLiveQuery(() => db.messages.filter((m) => !m.read).count()) ?? 0
   useEffect(() => {
-    const run = () => document.visibilityState === 'visible' && runCoach().catch((e) => console.warn('coach', e))
+    const run = () => document.visibilityState === 'visible' && import('./lib/coach.ts').then((m) => m.runCoach()).catch((e) => console.warn('coach', e))
     run()
     const t = setInterval(run, 10 * 60_000)
     document.addEventListener('visibilitychange', run)
