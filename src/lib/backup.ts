@@ -1,6 +1,6 @@
 import { db, saveSettings, today } from './db.ts'
 
-const TABLES = ['items', 'water', 'weights', 'chat', 'notes', 'customFoods', 'kv'] as const
+const TABLES = ['items', 'water', 'weights', 'chat', 'notes', 'customFoods', 'kv', 'meals'] as const
 
 /** Build the backup ahead of the tap: Android only allows share() right after a user gesture. */
 export async function prepareBackup(): Promise<File> {
@@ -37,11 +37,13 @@ export async function backup(file: File): Promise<'shared' | 'downloaded' | 'can
 export async function restore(file: File) {
   const parsed = JSON.parse(await file.text())
   if (parsed?.app !== 'minis-coach' || typeof parsed.data !== 'object') throw new Error('الملف ده مش باك أب من Mini\'s Coach')
-  for (const t of TABLES) if (!Array.isArray(parsed.data[t])) throw new Error(`الملف ناقص: ${t}`)
+  // backups from older versions lack newer tables; those just start empty
+  for (const t of TABLES) if (parsed.data[t] !== undefined && !Array.isArray(parsed.data[t])) throw new Error(`الملف بايظ: ${t}`)
+  if (!Array.isArray(parsed.data.items)) throw new Error('الملف ناقص: items')
   await db.transaction('rw', TABLES.map((t) => db.table(t)), async () => {
     for (const t of TABLES) {
       await db.table(t).clear()
-      await db.table(t).bulkAdd(parsed.data[t])
+      await db.table(t).bulkAdd(parsed.data[t] ?? [])
     }
   })
   await saveSettings({ onboarded: true }) // a restored backup means this person already set up the app

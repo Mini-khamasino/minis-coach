@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { compute, sum, zone, mifflin, trajectory, adaptiveTdee, addDays, weightTrend, targetsFor } from './calc.ts'
 import { FOODS } from './foods.ts'
+import { parse, search } from './parser.ts'
 
 // plain item: 200 g rice at 130/100 → 260
 assert.deepEqual(compute(FOODS.rice, 200, false), { kcal: 260, p: 5.4, c: 56, f: 0.6 })
@@ -43,6 +44,30 @@ const tr = weightTrend([{ date: '2026-10-17', kg: 115 }, { date: '2026-10-18', k
 assert.equal(tr.get('2026-10-18'), 114.9)
 assert.ok(tr.get('2026-10-20')! > 113.5 && tr.get('2026-10-20')! < 114.9)
 
+
+// ── parser ──
+const mem = { phrases: {}, portions: {} }
+const P = (s: string) => parse(s, [], mem).map((l) => [l.match?.key ?? null, l.grams, l.acc])
+assert.deepEqual(P('2 بيض ورغيف بلدي'), [['egg', 100, 'p'], ['aish_baladi', 90, 'p']])
+assert.deepEqual(P('بيضتين'), [['egg', 100, 'p']])
+assert.deepEqual(P('200 جرام رز'), [['rice_egy', 200, 'w']])
+assert.deepEqual(P('٢٠٠ج رز'), [['rice_egy', 200, 'w']])
+assert.deepEqual(P('طبق كبسة'), [['kabsa', 450, 'p']])
+assert.deepEqual(P('كوباية شاي ومعلقة عسل'), [['tea_sugar', 200, 'p'], ['honey', 20, 'p']])
+assert.deepEqual(P('٣ تمرات'), [['dates', 30, 'p']])
+assert.deepEqual(P('2 slices pizza, a coke'), [['pizza', 220, 'p'], ['soda', 330, 'p']])
+assert.deepEqual(P('رغيفين'), [['aish_baladi', 180, 'p']])
+assert.deepEqual(P('نص فرخة'), [['chicken', 125, 'p']])
+// learning: a corrected phrase and a usual portion win next time
+const learned = { phrases: { 'عيش': 'khubz' }, portions: { khubz: 60 } }
+assert.equal(parse('عيش', [], learned)[0].match?.key, 'khubz')
+assert.equal(parse('عيش', [], learned)[0].grams, 60)
+// personal recipe beats the generic table
+const myKabsa = { key: 'u:كبسة ماما', name: 'كبسة ماما', per100: { kcal: 160, p: 9, c: 18, f: 5.5 }, oily: false, foodId: null }
+assert.equal(parse('كبسة ماما 300 جرام', [myKabsa], mem)[0].match?.key, 'u:كبسة ماما')
+
+assert.equal(search('رز بسمتي', [], true)[0].key, 'raw_basmati') // recipe picker: raw first
+assert.equal(search('رز بسمتي', [])[0].key, 'basmati') // logging: cooked
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

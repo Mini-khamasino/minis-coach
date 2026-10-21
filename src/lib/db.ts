@@ -17,12 +17,19 @@ export interface Item extends Macros {
   per100: Macros
   margin: boolean
   estimated: boolean
+  /** w = weighed grams, p = estimated portion, l = from a label/menu */
+  acc?: 'w' | 'p' | 'l'
+  /** per100 holds per-serving values (menu/label entry); grams = servings × 100 */
+  perServing?: boolean
 }
 export interface Water { id?: number; date: string; ml: number; ts: number }
 export interface Weight { date: string; kg: number }
 export interface Chat { id?: number; date: string; ts: number; role: 'user' | 'coach'; text: string; logged?: string }
 export interface Note { id?: number; text: string; ts: number }
-export interface CustomFood { name: string; per100: Macros }
+export interface RecipeIngredient { foodId: string; name: string; grams: number }
+export interface CustomFood { name: string; per100: Macros; recipe?: { ingredients: RecipeIngredient[]; cookedGrams: number } }
+export interface MealItem { name: string; foodId: string | null; per100: Macros; grams: number; margin: boolean; perServing?: boolean }
+export interface SavedMeal { id?: number; name: string; items: MealItem[] }
 interface KV { key: string; value: unknown }
 
 export const db = new Dexie('minis-coach') as Dexie & {
@@ -33,6 +40,7 @@ export const db = new Dexie('minis-coach') as Dexie & {
   notes: EntityTable<Note, 'id'>
   customFoods: EntityTable<CustomFood, 'name'>
   kv: EntityTable<KV, 'key'>
+  meals: EntityTable<SavedMeal, 'id'>
 }
 db.version(1).stores({
   items: '++id, date',
@@ -43,6 +51,7 @@ db.version(1).stores({
   customFoods: 'name',
   kv: 'key',
 })
+db.version(2).stores({ meals: '++id' })
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 
