@@ -42,6 +42,13 @@ export interface CoachMessage {
   picked?: string
   reaction?: string
   read: boolean
+  /** AI replies: what was logged, and how to reverse it */
+  receipt?: string[]
+  undo?: { items: number[]; water: number[]; weights: { date: string; prevKg: number | null }[]; workouts: number[]; notes: number[]; restore: Item[]; restoreWorkout: Workout[] }
+  undone?: boolean
+  remaining?: number
+  /** kept-on-phone questions (privacy gate) */
+  privateQ?: string
 }
 export interface WorkoutSet { kg: number; reps: number; done: boolean }
 export interface Workout {

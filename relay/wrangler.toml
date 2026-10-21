@@ -1,0 +1,12 @@
+name = "minis-coach-ai"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+PROJECT = "sirr-sibhah-67e7a"
+ADMIN_EMAIL = "a.alimohammed2005@gmail.com"
+DAILY_CAP = "200"
+# tried in order; checked against Groq's model list at setup
+MODELS = "openai/gpt-oss-120b,llama-3.3-70b-versatile,qwen/qwen3-32b"
+
+# [[kv_namespaces]] added at setup (wrangler kv namespace create USAGE)

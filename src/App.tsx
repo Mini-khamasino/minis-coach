@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
+import { House, UtensilsCrossed, Dumbbell, MessageCircle, Sparkles } from 'lucide-react'
 import { db, getSettings, DEFAULTS, DEMO } from './lib/db.ts'
 import { useSync, takeJustSignedIn, useFeatures } from './lib/syncCore.ts'
 import { L } from './lib/i18n.ts'
@@ -9,6 +9,7 @@ import { Today } from './components/Today.tsx'
 const Food = lazy(() => import('./components/Food.tsx').then((m) => ({ default: m.Food })))
 const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ default: m.Exercise })))
 const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
+const AssistantSheet = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.AssistantSheet })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { ProfileSheet } from './components/ProfileSheet.tsx'
 import { Toaster, UpdatePrompt, toast } from './components/ui.tsx'
@@ -26,9 +27,11 @@ export default function App() {
   const s = boot?.s ?? DEFAULTS
   const sync = useSync()
   const features = useFeatures(sync.user)
+  const aiOn = features.ai && s.aiEnabled && !!sync.user
   const [tab, setTab] = useState<Tab>('today')
   const [seen, setSeen] = useState<Set<Tab>>(() => new Set(['today']))
   const [settings, setSettings] = useState(false)
+  const [assistant, setAssistant] = useState(false)
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? 'dark')
   const [compact, setCompact] = useState(false)
 
@@ -105,7 +108,7 @@ export default function App() {
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
           {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>}
           {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>}
-          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} /></div>}
+          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} aiOn={aiOn} /></div>}
         </Suspense>
       </main>
 
@@ -127,6 +130,13 @@ export default function App() {
         ))}
       </nav>
 
+      {tab !== 'coach' && (
+        <button className="press glass fixed end-4 bottom-[calc(92px+env(safe-area-inset-bottom))] z-30 grid size-13 place-items-center rounded-full text-accent"
+          onClick={() => setAssistant(true)} aria-label={L('كلم الكوتش', 'Talk to the coach')}>
+          <Sparkles size={24} />
+        </button>
+      )}
+      {assistant && <Suspense fallback={null}><AssistantSheet aiOn={aiOn} onClose={() => setAssistant(false)} onOpenCoach={() => go('coach')} /></Suspense>}
       {settings && <ProfileSheet s={s} sync={sync} features={features} onClose={() => setSettings(false)} />}
       <Toaster />
       <UpdatePrompt />

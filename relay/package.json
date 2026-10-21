@@ -1,0 +1,8 @@
+{
+  "name": "minis-coach-relay",
+  "private": true,
+  "type": "module",
+  "scripts": { "deploy": "wrangler deploy", "dev": "wrangler dev" },
+  "dependencies": { "jose": "^6.1.0" },
+  "devDependencies": { "wrangler": "^4.151.3" }
+}

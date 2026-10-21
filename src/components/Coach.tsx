@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Sparkles, RefreshCw, Copy, ArrowUp } from 'lucide-react'
+import { Sparkles, RefreshCw, Copy, ArrowUp, Undo2 } from 'lucide-react'
 import { db, type CoachMessage } from '../lib/db.ts'
 import { pickReply, react, aiPrompt, markAiShared, ask } from '../lib/coach.ts'
 import { L, locale } from '../lib/i18n.ts'
@@ -8,13 +8,27 @@ import { Sheet, toast } from './ui.tsx'
 
 const REACTIONS = ['👍', '❤️', '😅', '💪', '👎']
 
-/** The coach writes; the person reacts, taps a quick reply, or asks a question. Reads top-to-bottom like a chat. */
-export function Coach({ visible }: { visible: boolean }) {
+/** Send one message: to the AI when it's on (gated for privacy on the phone), otherwise to the built-in answerer. */
+function useSend(aiOn: boolean) {
+  const [busy, setBusy] = useState(false)
+  const send = async (q: string) => {
+    if (!q.trim() || busy) return
+    if (!aiOn) return ask(q)
+    setBusy(true)
+    try { await (await import('../lib/ai.ts')).chat(q) } finally { setBusy(false) }
+  }
+  return { busy, send }
+}
+
+/** The coach writes; the person reacts, taps a quick reply, or asks / tells it anything. Reads top-to-bottom like a chat. */
+export function Coach({ visible, aiOn }: { visible: boolean; aiOn: boolean }) {
   const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray().then((a) => a.reverse())) ?? []
   const [q, setQ] = useState('')
+  const [promptQ, setPromptQ] = useState('')
   const end = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length])
-  const send = () => { if (q.trim()) { ask(q); setQ('') } }
+  const { busy, send: sendNow } = useSend(aiOn)
+  useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length, busy])
+  const send = () => { sendNow(q); setQ('') }
   const lastShare = useLiveQuery(() => db.kv.get('lastAiShare'))?.value as number | undefined
   const [ai, setAi] = useState<'full' | 'update' | null>(null)
 
@@ -50,24 +64,66 @@ export function Coach({ visible }: { visible: boolean }) {
         return (
           <div key={m.id} className="contents">
             {divider && <p className="mt-1 text-center text-[12px] text-ink-3">{new Date(m.date).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
-            <Bubble m={m} />
+            <Bubble m={m} onPrompt={(text) => { setPromptQ(text); setAi('full') }} />
           </div>
         )
       })}
 
+      {busy && <Typing />}
       <div ref={end} />
       <form className="glass sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send() }}>
         <input className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-ink-3" value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder={L('اسأل الكوتش… ينفع آكل كنافة؟', 'Ask the coach… can I eat kunafa?')} aria-label={L('اسأل الكوتش', 'Ask the coach')} enterKeyHint="send" />
-        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim()} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
+          placeholder={aiOn ? L('قول أي حاجة… "فطرت 2 بيض ورغيف"', 'Say anything… "had 2 eggs and a pita"') : L('اسأل الكوتش… ينفع آكل كنافة؟', 'Ask the coach… can I eat kunafa?')} aria-label={L('اسأل الكوتش', 'Ask the coach')} enterKeyHint="send" />
+        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim() || busy} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
       </form>
 
-      {ai && <AiSheet mode={ai} onClose={() => setAi(null)} />}
+      {ai && <AiSheet mode={ai} initialQ={promptQ} onClose={() => { setAi(null); setPromptQ('') }} />}
     </div>
   )
 }
 
-function Bubble({ m }: { m: CoachMessage }) {
+const Typing = () => (
+  <div className="surface pop-enter flex w-16 gap-1 rounded-[20px] px-4 py-3" aria-label={L('الكوتش بيكتب', 'Coach is typing')}>
+    {[0, 1, 2].map((i) => <span key={i} className="size-2 animate-pulse rounded-full bg-ink-3" style={{ animationDelay: `${i * 160}ms` }} />)}
+  </div>
+)
+
+const PRIVATE_TEXT: Record<string, [string, string]> = {
+  private: ['🔒 ده موضوع شخصي، فمش هبعته للـ AI. أعملك برومبت تسأل بيه الـ AI بتاعك (Gemini أو ChatGPT) بخصوصية؟', "🔒 That's personal, so I won't send it to the AI. Want a ready prompt to ask your own AI (Gemini or ChatGPT) privately?"],
+  eating: ['💛 شكراً إنك قلت. الترجيع أو الحرمان بيأذوا جسمك ونفسيتك أكتر من أي زيادة وزن، وده مش ضعف منك. كلم دكتور أو أخصائي تغذية تثق فيه — دي أقوى خطوة. ولو حابب، أعملك برومبت تسأل بيه الـ AI بتاعك بخصوصية.', "💛 Thank you for saying it. Purging or starving hurts your body and mind more than any weight gain, and it isn't weakness. Talk to a doctor or dietitian you trust — that's the strongest step. If you like, I can build a prompt for your own AI, privately."],
+  crisis: ['💛 أنا آسف إنك حاسس كده — انت مش لوحدك. كلم حد قريب منك دلوقتي. لو في خطر اتصل بالطوارئ: 997 في السعودية، 123 في مصر. وفي السعودية تقدر تكلم 937 (وزارة الصحة) 24 ساعة.', "💛 I'm sorry you feel this way — you're not alone. Reach out to someone close to you now. If you're in danger call emergency services: 997 in Saudi Arabia, 123 in Egypt. In Saudi Arabia you can also call 937 (Ministry of Health), 24/7."],
+}
+
+function Bubble({ m, onPrompt }: { m: CoachMessage; onPrompt?: (q: string) => void }) {
+  if (m.kind === 'private') {
+    const [ar, en] = PRIVATE_TEXT[m.text] ?? PRIVATE_TEXT.private
+    return (
+      <article className="surface pop-enter rounded-[22px] p-3.5">
+        <p className="text-[15px] leading-relaxed">{L(ar, en)}</p>
+        {m.text !== 'crisis' && m.privateQ && (
+          <button className="press mt-3 rounded-full bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-white" onClick={() => onPrompt?.(m.privateQ!)}>🔒 {L('اعمل البرومبت', 'Build the prompt')}</button>
+        )}
+      </article>
+    )
+  }
+  if (m.kind === 'ai') {
+    return (
+      <article className="surface pop-enter rounded-[22px] p-3.5">
+        <p className="mb-1 text-[11px] text-ink-3">✨ {new Date(m.ts).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}{m.remaining !== undefined && m.remaining < 30 ? ` · ${L(`فاضل ${m.remaining} رسالة النهارده`, `${m.remaining} messages left today`)}` : ''}</p>
+        <p className="text-[15px] leading-relaxed whitespace-pre-line">{m.text}</p>
+        {m.receipt && (
+          <ul className={`mt-2 rounded-2xl bg-fill px-3 py-2 text-[13px] ${m.undone ? 'text-ink-3 line-through' : 'text-ink-2'}`}>
+            {m.receipt.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        )}
+        {m.undo && !m.undone && (
+          <button className="press mt-2 flex items-center gap-1 text-[13px] text-accent" onClick={async () => { await (await import('../lib/ai.ts')).undoTurn(m); toast(L('↩️ اتلغى', '↩️ Undone')) }}>
+            <Undo2 size={15} /> {L('تراجع', 'Undo')}
+          </button>
+        )}
+      </article>
+    )
+  }
   if (m.kind === 'ask') {
     return <p className="pop-enter w-fit ms-auto max-w-[80%] rounded-[20px] rounded-ee-md bg-accent px-3.5 py-2 text-[15px] text-white">{m.text}</p>
   }
@@ -97,8 +153,8 @@ function Bubble({ m }: { m: CoachMessage }) {
   )
 }
 
-function AiSheet({ mode, onClose }: { mode: 'full' | 'update'; onClose: () => void }) {
-  const [q, setQ] = useState('')
+function AiSheet({ mode, initialQ = '', onClose }: { mode: 'full' | 'update'; initialQ?: string; onClose: () => void }) {
+  const [q, setQ] = useState(initialQ)
   const [text, setText] = useState('')
   useEffect(() => { aiPrompt(mode, q).then(setText) }, [mode, q])
 
@@ -121,6 +177,27 @@ function AiSheet({ mode, onClose }: { mode: 'full' | 'update'; onClose: () => vo
       <button className="press flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3 font-semibold text-white disabled:opacity-40" disabled={!text} onClick={send}>
         <Copy size={18} /> {L('انسخ وابعت', 'Copy & share')}
       </button>
+    </Sheet>
+  )
+}
+
+/** ✨ from any tab: the last few exchanges and a box to tell the coach anything. */
+export function AssistantSheet({ aiOn, onClose, onOpenCoach }: { aiOn: boolean; onClose: () => void; onOpenCoach: () => void }) {
+  const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(6).toArray().then((a) => a.reverse().filter((m) => ['ask', 'ai', 'private', 'answer'].includes(m.kind)))) ?? []
+  const [q, setQ] = useState('')
+  const { busy, send } = useSend(aiOn)
+  return (
+    <Sheet title={L('✨ الكوتش', '✨ Coach')} onClose={onClose}>
+      <div className="flex flex-col gap-2.5 pb-3">
+        {!msgs.length && <p className="py-4 text-center text-[14px] text-ink-2">{aiOn ? L('قول أي حاجة: أكلك، ميتك، وزنك، تمرينك، أو اسأل.', 'Say anything: food, water, weight, workout — or ask.') : L('اسأل عن أكلك أو أرقامك.', 'Ask about your food or numbers.')}</p>}
+        {msgs.map((m) => <Bubble key={m.id} m={m} onPrompt={() => { onClose(); onOpenCoach() }} />)}
+        {busy && <Typing />}
+      </div>
+      <form className="flex items-center gap-2 rounded-full bg-fill py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send(q); setQ('') }}>
+        <input className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-ink-3" value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+          placeholder={aiOn ? L('"فطرت 2 بيض ورغيف"…', '"had 2 eggs and a pita"…') : L('ينفع آكل كنافة؟', 'Can I eat kunafa?')} aria-label={L('اكتب للكوتش', 'Message the coach')} enterKeyHint="send" />
+        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim() || busy} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
+      </form>
     </Sheet>
   )
 }

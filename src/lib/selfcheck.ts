@@ -6,6 +6,7 @@ import { parse, search } from './parser.ts'
 import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
 import { generate, advice, answer } from './coach.ts'
+import { sensitivity } from './privacy.ts'
 import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
@@ -122,6 +123,18 @@ assert.match(A('آكل ايه على العشا؟'), /•/)
 assert.match(A('can I eat a slice of pizza?'), /Yes|أيوه/)
 assert.match(A('how much should I eat a day'), /1800/)
 assert.match(A('مين كسب الماتش امبارح؟'), /معرفش|don't know/) // off-topic → honest "I don't know"
+
+// ── privacy gate ──
+assert.equal(sensitivity('كلت 2 بيض ورغيف وكوباية شاي بسكر'), 'ok')
+assert.equal(sensitivity('أكلت 5 تمرات سكري'), 'ok') // sukkari dates are food, not diabetes
+assert.equal(sensitivity('ينفع آكل كنافة؟'), 'ok')
+assert.equal(sensitivity('عندي سكر ينفع آكل تمر؟'), 'private')
+assert.equal(sensitivity('باخد اوزمبك هل ده يأثر؟'), 'private')
+assert.equal(sensitivity('أنا حامل ومحتاجة كام سعر'), 'private')
+assert.equal(sensitivity('I take metformin, is that ok?'), 'private')
+assert.equal(sensitivity('بستفرغ بعد الأكل عشان مزيدش'), 'eating')
+assert.equal(sensitivity('I make myself vomit after dinner'), 'eating')
+assert.equal(sensitivity('مش عايز أعيش وعايز اموت'), 'crisis')
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)
