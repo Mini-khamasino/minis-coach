@@ -275,6 +275,13 @@ function Dev() {
       <Toggle label={L('🧪 وضع التجربة', '🧪 Test mode')} on={DEMO} onChange={async (on) => { const { setDemo } = await import('../lib/demo.ts'); setDemo(on) }}
         sub={L('بيانات تجريبية منفصلة + كل المزايا الجديدة ليك انت بس. بياناتك الحقيقية متتلمسش.', 'Separate sample data + every new feature, for you only. Your real data is untouched.')} />
       {DEMO && <button className="press rounded-2xl bg-fill py-2.5 text-[14px] text-ink-2" onClick={async () => (await import('../lib/demo.ts')).resetDemo()}>↺ {L('ابدأ بيانات التجربة من الأول', 'Reset the sample data')}</button>}
+      <button className="press rounded-2xl bg-fill py-2.5 text-[14px] text-accent" onClick={async () => {
+        try {
+          const { configured, available } = await (await import('../lib/ai.ts')).checkModels()
+          const ok = configured.filter((m) => available.includes(m))
+          toast(ok.length === configured.length ? L(`✅ الـ AI شغال — ${ok.length} موديلات`, `✅ AI works — ${ok.length} models`) : `⚠️ ${configured.filter((m) => !available.includes(m)).join(', ')} ${L('مش متاحين', 'unavailable')}`)
+        } catch (e) { toast(`⚠️ ${(e as Error).message}`) }
+      }}>🔌 {L('اختبر اتصال الـ AI', 'Test the AI connection')}</button>
       <p className="label mt-3">{L('نشر للكل', 'Publish to everyone')}</p>
       <Toggle label={L('✨ مساعد AI', '✨ AI assistant')} on={!!flags?.ai} disabled={!flags} onChange={(on) => flip('ai', on)}
         sub={L('لما تفتحه، أخواتك يشوفوه فوراً من غير تحديث', 'When on, everyone gets it instantly — no update needed')} />

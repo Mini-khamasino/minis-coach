@@ -9,4 +9,6 @@ DAILY_CAP = "200"
 # tried in order (Groq retired llama-3.3-70b and qwen3-32b in 2026); GET /models (admin) lists what the key can use
 MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.6-27b"
 
-# [[kv_namespaces]] added at setup (wrangler kv namespace create USAGE)
+[[kv_namespaces]]
+binding = "USAGE"
+id = "c7f36901e9494038b4c541c6070d2bb1"

@@ -9,7 +9,7 @@ import { lang } from './i18n.ts'
 import { sensitivity, type Sensitivity } from './privacy.ts'
 export type { Sensitivity }
 
-export const RELAY_URL = 'https://minis-coach-ai.REPLACE.workers.dev/chat'
+export const RELAY_URL = 'https://minis-coach-ai.minis-coach-relay.workers.dev/chat'
 
 // ── 2. anonymous context: numbers only — never name, email, photo or account id ──
 
@@ -183,6 +183,14 @@ async function run(call: ToolCall, undo: Undo, receipt: string[]): Promise<strin
 }
 
 export class AiError extends Error {}
+
+/** Developer page: which Groq models the relay is set to use vs what the key can call. */
+export async function checkModels(): Promise<{ configured: string[]; available: string[] }> {
+  const token = await idToken()
+  const r = await fetch(RELAY_URL.replace('/chat', '/models'), { headers: { Authorization: `Bearer ${token}` } })
+  if (!r.ok) throw new AiError(`relay ${r.status}`)
+  return r.json()
+}
 
 async function relay(messages: Msg[]): Promise<{ message: Msg; remaining: number | null }> {
   const token = await idToken()
