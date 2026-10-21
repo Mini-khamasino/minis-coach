@@ -1,8 +1,7 @@
 // Run: npm test
 import assert from 'node:assert/strict'
-import { compute, sum, zone, mifflin, trajectory, adaptiveTdee, addDays, weightTrend } from './calc.ts'
+import { compute, sum, zone, mifflin, trajectory, adaptiveTdee, addDays, weightTrend, targetsFor } from './calc.ts'
 import { FOODS } from './foods.ts'
-import { thinkingFor } from './coach.ts'
 
 // plain item: 200 g rice at 130/100 → 260
 assert.deepEqual(compute(FOODS.rice, 200, false), { kcal: 260, p: 5.4, c: 56, f: 0.6 })
@@ -20,6 +19,18 @@ assert.equal(zone(2501, 1850, 2500), 'red')
 assert.equal(mifflin(113.5, 177, 21), 2570)
 assert.equal(trajectory('2026-10-17', 115, 85, 0.75, '2026-10-31'), 113.5)
 assert.equal(trajectory('2026-10-17', 115, 85, 0.75, '2030-01-01'), 85)
+assert.equal(trajectory('2026-10-17', 60, 65, 0.25, '2026-11-14'), 61) // bulk goes up
+assert.equal(mifflin(60, 165, 25, 1.2, 'f'), 1614)
+
+// Mini: maintenance 2570, cut −20% → 2050, protein from BMI-27 weight (84.6 kg × 2 ≈ 170)
+const mini = targetsFor({ sex: 'm', age: 21, heightCm: 177, kg: 113.5, activity: 1.2, goalType: 'cut' })
+assert.deepEqual(mini, { maintenance: 2570, goal: 2050, protein: 170, greenMax: 2150, amberMax: 2570, ratePerWeek: 0.45 })
+// lean lifter bulking: protein uses real weight, surplus capped at 300
+const lifter = targetsFor({ sex: 'm', age: 24, heightCm: 180, kg: 75, activity: 1.55, goalType: 'bulk' })
+assert.equal(lifter.protein, 135)
+assert.equal(lifter.goal - Math.round(lifter.maintenance / 50) * 50 <= 300, true)
+// small woman cutting never goes under the 1200 floor
+assert.equal(targetsFor({ sex: 'f', age: 30, heightCm: 150, kg: 50, activity: 1.2, goalType: 'cut' }).goal >= 1200, true)
 
 // 21 days at 2000 kcal while losing 0.1 kg/day → 2000 + 770 = 2770
 const today = '2026-12-01'
@@ -32,11 +43,6 @@ const tr = weightTrend([{ date: '2026-10-17', kg: 115 }, { date: '2026-10-18', k
 assert.equal(tr.get('2026-10-18'), 114.9)
 assert.ok(tr.get('2026-10-20')! > 113.5 && tr.get('2026-10-20')! < 114.9)
 
-assert.deepEqual(thinkingFor('gemini-3.5-flash'), { thinkingLevel: 'low' })
-assert.deepEqual(thinkingFor('gemini-flash-latest'), { thinkingLevel: 'low' })
-assert.deepEqual(thinkingFor('gemini-2.5-flash'), { thinkingBudget: 0 })
-assert.equal(thinkingFor('gemini-2.0-flash'), undefined)
-assert.deepEqual(thinkingFor('gemini-3.1-flash-lite'), { thinkingLevel: 'minimal' })
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

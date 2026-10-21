@@ -30,9 +30,33 @@ export function zone(kcal: number, greenMax: number, amberMax: number): Zone {
   return kcal <= greenMax ? 'green' : kcal <= amberMax ? 'amber' : 'red'
 }
 
-/** Mifflin-St Jeor (male) × activity factor. */
-export function mifflin(kg: number, cm: number, age: number, activity = 1.2): number {
-  return Math.round((10 * kg + 6.25 * cm - 5 * age + 5) * activity)
+/** Mifflin-St Jeor × activity factor. */
+export function mifflin(kg: number, cm: number, age: number, activity = 1.2, sex: 'm' | 'f' = 'm'): number {
+  return Math.round((10 * kg + 6.25 * cm - 5 * age + (sex === 'm' ? 5 : -161)) * activity)
+}
+
+const round = (n: number, step: number) => Math.round(n / step) * step
+
+/** Onboarding calculator: maintenance, daily goal, gym-style protein, ring zones and weekly pace. */
+export function targetsFor(p: { sex: 'm' | 'f'; age: number; heightCm: number; kg: number; activity: number; goalType: 'cut' | 'maintain' | 'bulk' }) {
+  const maintenance = mifflin(p.kg, p.heightCm, p.age, p.activity, p.sex)
+  const floor = p.sex === 'f' ? 1200 : 1500
+  const goal =
+    p.goalType === 'cut' ? Math.max(floor, round(maintenance - Math.min(maintenance * 0.2, 750), 50))
+    : p.goalType === 'bulk' ? round(maintenance + Math.min(maintenance * 0.1, 300), 50)
+    : round(maintenance, 50)
+  // protein from a BMI-27 reference weight, so heavy bodies don't get absurd targets
+  const refKg = Math.min(p.kg, 27 * (p.heightCm / 100) ** 2)
+  const protein = round(refKg * (p.goalType === 'cut' ? 2 : 1.8), 5)
+  return {
+    maintenance,
+    goal,
+    protein,
+    // shortcut: zones only flag eating too much; under-eating on a bulk isn't colored, add a lower band if bulkers need it
+    greenMax: goal + (p.goalType === 'bulk' ? 250 : 100),
+    amberMax: p.goalType === 'cut' ? maintenance : goal + (p.goalType === 'bulk' ? 600 : 300),
+    ratePerWeek: round((Math.abs(goal - maintenance) * 7) / 7700, 0.05),
+  }
 }
 
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / DAY)
@@ -41,9 +65,10 @@ export function addDays(date: string, n: number): string {
   return new Date(Date.parse(date) + n * DAY).toISOString().slice(0, 10)
 }
 
-/** Planned weight on `date`: linear loss at `ratePerWeek`, floored at the target. */
+/** Planned weight on `date`: linear change at `ratePerWeek` toward the target (down for a cut, up for a bulk), stopping there. */
 export function trajectory(startDate: string, startKg: number, targetKg: number, ratePerWeek: number, date: string): number {
-  return r1(Math.max(targetKg, startKg - (ratePerWeek * daysBetween(startDate, date)) / 7))
+  const moved = (ratePerWeek * daysBetween(startDate, date)) / 7
+  return r1(targetKg < startKg ? Math.max(targetKg, startKg - moved) : Math.min(targetKg, startKg + moved))
 }
 
 /**

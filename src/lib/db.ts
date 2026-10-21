@@ -46,9 +46,20 @@ db.version(1).stores({
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 
+export type Sex = 'm' | 'f'
+export type GoalType = 'cut' | 'maintain' | 'bulk'
+export const ACCENTS = ['blue', 'green', 'purple', 'pink', 'orange', 'teal', 'red', 'graphite'] as const
+export type Accent = (typeof ACCENTS)[number]
+
 export interface Settings {
-  apiKey: string
-  model: string
+  onboarded: boolean
+  name: string
+  sex: Sex
+  activity: number
+  goalType: GoalType
+  trainDays: number
+  lang: 'ar' | 'en'
+  accent: Accent
   goal: number
   protein: number
   greenMax: number
@@ -65,8 +76,14 @@ export interface Settings {
   theme: 'system' | 'dark' | 'light'
 }
 export const DEFAULTS: Settings = {
-  apiKey: '',
-  model: 'gemini-flash-lite-latest',
+  onboarded: false,
+  name: '',
+  sex: 'm',
+  activity: 1.2,
+  goalType: 'cut',
+  trainDays: 3,
+  lang: 'ar',
+  accent: 'blue',
   goal: 1750,
   protein: 130,
   greenMax: 1850,

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { L } from '../lib/i18n.ts'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { ZONE_COLOR, type Zone } from '../lib/calc.ts'
 
@@ -28,20 +29,61 @@ export function Toaster() {
   )
 }
 
+/** Bottom sheet: drag the top strip 1:1, flick down to close (momentum-projected), exits the way it came in. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ y0: number; dy: number; hist: { y: number; t: number }[] } | null>(null)
+
+  const dismiss = useCallback(() => {
+    const el = panel.current
+    if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return onClose()
+    el.style.transition = 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1)'
+    el.style.transform = 'translateY(100%)'
+    setTimeout(onClose, 260)
+  }, [onClose])
+
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && dismiss()
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [onClose])
+  }, [dismiss])
+
+  const down = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    panel.current!.style.transition = 'none'
+    drag.current = { y0: e.clientY, dy: 0, hist: [{ y: e.clientY, t: e.timeStamp }] }
+  }
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d) return
+    d.dy = e.clientY - d.y0
+    d.hist = [...d.hist.filter((h) => e.timeStamp - h.t < 100), { y: e.clientY, t: e.timeStamp }]
+    // dragging up past the top resists instead of stopping dead
+    panel.current!.style.transform = `translateY(${d.dy < 0 ? d.dy * 0.2 : d.dy}px)`
+  }
+  const up = () => {
+    const d = drag.current
+    drag.current = null
+    if (!d) return
+    const first = d.hist[0], last = d.hist.at(-1)!
+    const v = last.t > first.t ? ((last.y - first.y) / (last.t - first.t)) * 1000 : 0 // px/s
+    const projected = d.dy + ((v / 1000) * 0.998) / (1 - 0.998) // Apple's momentum projection
+    if (projected > panel.current!.offsetHeight * 0.4) return dismiss()
+    panel.current!.style.transition = 'transform 380ms var(--ease-spring)'
+    panel.current!.style.transform = ''
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="fade-enter absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="glass sheet-enter relative max-h-[88dvh] w-full max-w-[520px] overflow-y-auto rounded-t-[28px] px-5 pt-2 pb-[max(20px,env(safe-area-inset-bottom))]">
-        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-ink-3" />
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[20px] font-semibold">{title}</h2>
-          <button className="press rounded-full bg-fill px-3 py-1 text-[15px] text-blue" onClick={onClose}>تم</button>
+      <div className="fade-enter absolute inset-0 bg-black/45" onClick={dismiss} />
+      <div ref={panel} className="glass sheet-enter relative max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-t-[30px] px-5 pb-[max(20px,env(safe-area-inset-bottom))]">
+        <div className="sticky top-0 z-10 -mx-5 touch-none px-5 pt-2 pb-3" style={{ background: 'linear-gradient(var(--glass-solid) 70%, transparent)' }}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+          <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-ink-3" />
+          <div className="flex items-center justify-between">
+            <h2 className="text-[20px] font-semibold tracking-tight">{title}</h2>
+            <button className="press rounded-full bg-fill px-3 py-1 text-[15px] font-medium text-accent" onPointerDown={(e) => e.stopPropagation()} onClick={dismiss}>{L('تم', 'Done')}</button>
+          </div>
         </div>
         {children}
       </div>
@@ -71,7 +113,7 @@ export function Ring({ value, max, zone, size = 168, stroke = 18, children }: { 
   )
 }
 
-export function Bar({ label, value, max, color, unit = 'ج' }: { label: string; value: number; max: number; color: string; unit?: string }) {
+export function Bar({ label, value, max, color, unit = L('ج', 'g') }: { label: string; value: number; max: number; color: string; unit?: string }) {
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between text-[13px]">
@@ -97,9 +139,21 @@ export function UpdatePrompt() {
   return (
     <div className="fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
       <div role="alert" className="glass pop-enter flex items-center gap-3 rounded-full py-1.5 ps-4 pe-1.5 shadow-2xl">
-        <span className="text-[15px]">✨ فيه تحديث جديد</span>
-        <button className="press rounded-full bg-blue px-4 py-1.5 text-[14px] font-semibold text-white" onClick={() => updateServiceWorker(true)}>حدّث</button>
+        <span className="text-[15px]">{L('✨ فيه تحديث جديد', '✨ Update available')}</span>
+        <button className="press rounded-full bg-accent px-4 py-1.5 text-[14px] font-semibold text-white" onClick={() => updateServiceWorker(true)}>{L('حدّث', 'Update')}</button>
       </div>
+    </div>
+  )
+}
+
+/** Segmented control (iOS-style). */
+export function Seg<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
+  return (
+    <div className="flex w-full gap-1 rounded-xl bg-fill p-1" role="radiogroup">
+      {options.map(([v, label]) => (
+        <button key={v} role="radio" aria-checked={value === v} onClick={() => onChange(v)}
+          className={`press flex-1 rounded-lg py-2 text-[14px] ${value === v ? 'glass font-semibold' : 'text-ink-2'}`}>{label}</button>
+      ))}
     </div>
   )
 }

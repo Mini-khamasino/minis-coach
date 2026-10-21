@@ -10,8 +10,9 @@ let muted = false // true while writing cloud data into Dexie, so it isn't echoe
 
 const keyPath = (t: string) => db.table(t).schema.primKey.keyPath as string
 const ref = (t: string, key: unknown) => doc(fs, 'coachUsers', uid!, t, encodeURIComponent(String(key)))
+// old installs still carry the removed Gemini key in settings; never upload it
 const clean = (t: string, obj: Record<string, unknown>) =>
-  t === 'kv' && obj.key === 'settings' ? { ...obj, value: { ...(obj.value as object), apiKey: '' } } : obj
+  t === 'kv' && obj.key === 'settings' ? { ...obj, value: { ...(obj.value as object), apiKey: undefined, model: undefined } } : obj
 
 const push = (t: string, key: unknown, obj: object) =>
   setDoc(ref(t, key), clean(t, { ...obj, [keyPath(t)]: key } as Record<string, unknown>)).catch((e) => console.warn('sync', e))
@@ -37,7 +38,6 @@ async function uploadAll() {
 }
 
 async function downloadAll() {
-  const keepKey = ((await db.kv.get('settings'))?.value as { apiKey?: string } | undefined)?.apiKey ?? ''
   const data = await Promise.all(db.tables.map(async (t) => [t, (await getDocs(collection(fs, 'coachUsers', uid!, t.name))).docs.map((d) => d.data())] as const))
   muted = true
   try {
@@ -45,7 +45,7 @@ async function downloadAll() {
       for (const [t, rows] of data) if (rows.length) await t.bulkPut(rows)
     })
     const s = await db.kv.get('settings')
-    if (s) await db.kv.put({ key: 'settings', value: { ...(s.value as object), apiKey: keepKey } })
+    if (s) await db.kv.put({ key: 'settings', value: { ...(s.value as object), onboarded: true } })
   } finally {
     muted = false
   }
