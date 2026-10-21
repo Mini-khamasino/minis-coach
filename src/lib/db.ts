@@ -55,7 +55,11 @@ export interface Workout {
 }
 interface KV { key: string; value: unknown }
 
-export const db = new Dexie('minis-coach') as Dexie & {
+/** Test mode (admin only): a separate sandbox database with sample data that never syncs. Switching reloads the app. */
+export const DEMO = (() => { try { return localStorage.getItem('demo') === '1' } catch { return false } })()
+export const ADMIN_EMAIL = 'a.alimohammed2005@gmail.com'
+
+export const db = new Dexie(DEMO ? 'minis-coach-demo' : 'minis-coach') as Dexie & {
   items: EntityTable<Item, 'id'>
   water: EntityTable<Water, 'id'>
   weights: EntityTable<Weight, 'date'>
@@ -99,6 +103,8 @@ export interface Settings {
   restSec: number
   lang: 'ar' | 'en'
   accent: Accent
+  transparency: boolean
+  aiEnabled: boolean
   goal: number
   protein: number
   greenMax: number
@@ -126,6 +132,8 @@ export const DEFAULTS: Settings = {
   restSec: 90,
   lang: 'ar',
   accent: 'blue',
+  transparency: true,
+  aiEnabled: true,
   goal: 1750,
   protein: 130,
   greenMax: 1850,

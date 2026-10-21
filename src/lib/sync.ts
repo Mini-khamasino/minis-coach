@@ -1,10 +1,10 @@
 // The heavy half of cloud sync (Firebase), loaded after first paint. Dexie stays the source of truth (offline,
 // instant); Firestore mirrors it per user at coachUsers/{uid}/{table}/{key}.
-import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch, query, limit, onSnapshot } from 'firebase/firestore'
 import { signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth'
-import { db } from './db.ts'
+import { db, DEMO } from './db.ts'
 import { auth, fs, googleProvider } from './firebase.ts'
-import { setSender, setMuted, type Op, type SyncState } from './syncCore.ts'
+import { setSender, setMuted, type Op, type SyncState, type Flags } from './syncCore.ts'
 
 const keyPath = (t: string) => db.table(t).schema.primKey.keyPath as string
 const ref = (uid: string, t: string, key: unknown) => doc(fs, 'coachUsers', uid, t, encodeURIComponent(String(key)))
@@ -59,6 +59,8 @@ async function reconcile(user: User) {
 export function watchAuth(cb: (s: SyncState) => void) {
   return onAuthStateChanged(auth, (user) => {
     if (!user) { setSender(null); return cb({ user: null, status: 'idle' }) }
+    // the sandbox never touches the real account's data
+    if (DEMO) { setSender(null); return cb({ user, status: 'idle' }) }
     cb({ user, status: 'syncing' })
     reconcile(user).then(
       () => { setSender(sender(user.uid)); cb({ user, status: 'synced' }) },
@@ -82,3 +84,12 @@ export async function pullFromCloud() {
 // same as the Islam app: always a popup
 export const signIn = () => signInWithPopup(auth, googleProvider)
 export const logOut = () => signOut(auth)
+
+// ── published features: coachConfig/features, readable by signed-in users, writable only by the admin (Firestore rules) ──
+export function watchFlags(cb: (f: Flags) => void) {
+  return onSnapshot(doc(fs, 'coachConfig', 'features'), (snap) => cb({ ai: false, ...(snap.data() as Partial<Flags> | undefined) }), () => cb({ ai: false }))
+}
+export const setFlag = (name: keyof Flags, on: boolean) => setDoc(doc(fs, 'coachConfig', 'features'), { [name]: on }, { merge: true })
+
+/** Fresh Firebase sign-in token for the AI relay. */
+export const idToken = () => auth.currentUser?.getIdToken() ?? Promise.resolve(null)

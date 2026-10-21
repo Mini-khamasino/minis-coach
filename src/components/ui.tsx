@@ -30,7 +30,7 @@ export function Toaster() {
 }
 
 /** Bottom sheet: drag the top strip 1:1, flick down to close (momentum-projected), exits the way it came in. */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, onClose, onBack, children }: { title: string; onClose: () => void; onBack?: () => void; children: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null)
   const drag = useRef<{ y0: number; dy: number; hist: { y: number; t: number }[] } | null>(null)
 
@@ -81,7 +81,14 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
           <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-ink-3" />
           <div className="flex items-center justify-between">
-            <h2 className="text-[20px] font-semibold tracking-tight">{title}</h2>
+            <div className="flex min-w-0 items-center gap-1">
+              {onBack && (
+                <button className="press -ms-2 grid size-9 place-items-center rounded-full text-accent" onPointerDown={(e) => e.stopPropagation()} onClick={onBack} aria-label={L('رجوع', 'Back')}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="rtl:-scale-x-100" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+              )}
+              <h2 className="truncate text-[20px] font-semibold tracking-tight">{title}</h2>
+            </div>
             <button className="press rounded-full bg-fill px-3 py-1 text-[15px] font-medium text-accent" onPointerDown={(e) => e.stopPropagation()} onClick={dismiss}>{L('تم', 'Done')}</button>
           </div>
         </div>

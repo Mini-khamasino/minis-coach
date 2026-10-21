@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
-import { db, getSettings, DEFAULTS } from './lib/db.ts'
-import { useSync, takeJustSignedIn } from './lib/syncCore.ts'
+import { db, getSettings, DEFAULTS, DEMO } from './lib/db.ts'
+import { useSync, takeJustSignedIn, useFeatures } from './lib/syncCore.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 // tabs other than Today load on first visit, so the app opens fast
@@ -10,7 +10,7 @@ const Food = lazy(() => import('./components/Food.tsx').then((m) => ({ default: 
 const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ default: m.Exercise })))
 const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
 import { Onboarding } from './components/Onboarding.tsx'
-import { SettingsSheet } from './components/SettingsSheet.tsx'
+import { ProfileSheet } from './components/ProfileSheet.tsx'
 import { Toaster, UpdatePrompt, toast } from './components/ui.tsx'
 
 const TABS = [
@@ -25,6 +25,7 @@ export default function App() {
   const boot = useLiveQuery(async () => ({ s: await getSettings(), logged: await db.items.count() }))
   const s = boot?.s ?? DEFAULTS
   const sync = useSync()
+  const features = useFeatures(sync.user)
   const [tab, setTab] = useState<Tab>('today')
   const [seen, setSeen] = useState<Set<Tab>>(() => new Set(['today']))
   const [settings, setSettings] = useState(false)
@@ -37,6 +38,7 @@ export default function App() {
       const t = s.theme === 'system' ? (mq.matches ? 'light' : 'dark') : s.theme
       document.documentElement.dataset.theme = t
       document.documentElement.dataset.accent = s.accent
+      document.documentElement.toggleAttribute('data-solid', !s.transparency)
       document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'light' ? '#EBEBF0' : '#000000')
       try { localStorage.setItem('theme', s.theme); localStorage.setItem('accent', s.accent) } catch { /* private mode */ }
       setTheme(t)
@@ -44,7 +46,7 @@ export default function App() {
     apply()
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
-  }, [s.theme, s.accent])
+  }, [s.theme, s.accent, s.transparency])
 
   // Tab bar shrinks to icons while scrolling down, comes back on the way up (iOS 26 style).
   useEffect(() => {
@@ -92,6 +94,12 @@ export default function App() {
         </button>
       </header>
 
+      {DEMO && (
+        <button className="press mb-3 w-full rounded-2xl bg-amber/15 py-2 text-[13px] font-medium text-amber" onClick={() => setSettings(true)}>
+          🧪 {L('وضع التجربة — بيانات تجريبية، بياناتك الحقيقية في أمان', 'Test mode — sample data, your real data is safe')}
+        </button>
+      )}
+
       <main>
         <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
@@ -119,7 +127,7 @@ export default function App() {
         ))}
       </nav>
 
-      {settings && <SettingsSheet s={s} sync={sync} onClose={() => setSettings(false)} />}
+      {settings && <ProfileSheet s={s} sync={sync} features={features} onClose={() => setSettings(false)} />}
       <Toaster />
       <UpdatePrompt />
     </div>

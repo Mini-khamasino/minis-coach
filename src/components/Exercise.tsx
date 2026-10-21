@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter'
 import { Check, Plus, RotateCcw, Timer, Trophy, X, Info } from 'lucide-react'
-import { db, today, saveSettings, type Settings, type Workout } from '../lib/db.ts'
+import { db, today, type Settings, type Workout } from '../lib/db.ts'
 import { EXERCISES, PROGRAMS, exName, muscleName, suggestProgram, workoutKcal, e1rm, type Program } from '../lib/exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from '../lib/training.ts'
 import { L } from '../lib/i18n.ts'
 import { Sheet, Seg, toast, tick } from './ui.tsx'
+import { ProgramPicker } from './ProgramPicker.tsx'
 
 const repsMin = (r: string) => parseInt(r) || 8
 
@@ -132,26 +133,8 @@ function MuscleSheet({ muscle, place, onClose }: { muscle: Muscle; place: 'gym' 
   )
 }
 
-function ProgramSheet({ s, current, onClose }: { s: Settings; current: Program; onClose: () => void }) {
-  const suggested = suggestProgram(s.trainDays, s.place)
-  return (
-    <Sheet title={L('البرنامج', 'Program')} onClose={onClose}>
-      <div className="mb-3"><Seg value={s.place} onChange={(place) => saveSettings({ place, programId: '' })} options={[['gym', L('جيم', 'Gym')], ['home', L('البيت', 'Home')]]} /></div>
-      <p className="label mb-2">{L('أيام في الأسبوع', 'Days per week')}</p>
-      <div className="mb-4"><Seg value={String(s.trainDays)} onChange={(d) => saveSettings({ trainDays: Number(d), programId: '' })} options={[2, 3, 4, 5, 6].map((d) => [String(d), String(d)] as [string, string])} /></div>
-      {PROGRAMS.filter((p) => p.place === s.place).map((p) => (
-        <button key={p.id} className={`press mb-2 w-full rounded-2xl p-3.5 text-start ${p.id === current.id ? 'bg-accent text-white' : 'bg-fill'}`}
-          onClick={() => { saveSettings({ programId: p.id }); onClose() }}>
-          <p className="font-semibold">{L(p.ar, p.en)} {p.id === suggested.id && <span className="text-[12px] opacity-80">· {L('مقترح ليك', 'suggested')}</span>}</p>
-          <p className={`text-[13px] ${p.id === current.id ? 'text-white/80' : 'text-ink-2'}`}>{p.days.map((d) => L(d.ar, d.en)).join(' → ')}</p>
-        </button>
-      ))}
-      <label className="mt-3 block">
-        <span className="label">{L('الراحة بين السيتات (ثانية)', 'Rest between sets (seconds)')}</span>
-        <Seg value={String(s.restSec)} onChange={(v) => saveSettings({ restSec: Number(v) })} options={[60, 90, 120, 180].map((v) => [String(v), String(v)] as [string, string])} />
-      </label>
-    </Sheet>
-  )
+function ProgramSheet({ s, onClose }: { s: Settings; current: Program; onClose: () => void }) {
+  return <Sheet title={L('البرنامج', 'Program')} onClose={onClose}><ProgramPicker s={s} onPicked={onClose} /></Sheet>
 }
 
 function beep() {

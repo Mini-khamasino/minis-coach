@@ -2,11 +2,12 @@
 // the heavy half (sync.ts, loaded after first paint) once that knows who is signed in.
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
-import { db } from './db.ts'
+import { db, DEMO, ADMIN_EMAIL } from './db.ts'
 import { L } from './i18n.ts'
 
 export type Op = { t: string; key: unknown; obj?: object } // no obj = delete
 export type SyncState = { user: User | null; status: 'idle' | 'syncing' | 'synced' | 'error' }
+export type Flags = { ai: boolean }
 
 let queue: Op[] = []
 let send: ((op: Op) => void) | null = null
@@ -28,6 +29,7 @@ function emit(op: Op) {
 }
 
 export function installSyncHooks() {
+  if (DEMO) return // sandbox data never syncs
   for (const table of db.tables) {
     const t = table.name
     table.hook('creating', function (_pk, obj) { this.onsuccess = (key) => emit({ t, key, obj }) })
@@ -64,3 +66,23 @@ export const takeJustSignedIn = () => { const v = justSignedIn; justSignedIn = f
 export const logOut = () => loadSync().then((m) => m.logOut())
 export const pullFromCloud = () => loadSync().then((m) => m.pullFromCloud())
 export const backupNow = () => loadSync().then((m) => m.backupNow())
+export const setFlag = (name: keyof Flags, on: boolean) => loadSync().then((m) => m.setFlag(name, on))
+export const idToken = () => loadSync().then((m) => m.idToken())
+
+/**
+ * Which features this person gets: published ones for everyone; in test mode the admin gets every unreleased feature.
+ * Signed-out people get nothing that needs the network (the AI relay requires sign-in anyway).
+ */
+export function useFeatures(user: User | null): Flags & { admin: boolean } {
+  const [flags, setFlags] = useState<Flags>({ ai: false })
+  const uid = user?.uid
+  useEffect(() => {
+    if (!uid) return setFlags({ ai: false })
+    let off: (() => void) | undefined
+    let alive = true
+    loadSync().then((m) => { if (alive) off = m.watchFlags(setFlags) })
+    return () => { alive = false; off?.() }
+  }, [uid])
+  const admin = user?.email === ADMIN_EMAIL
+  return { ai: (DEMO && admin) || flags.ai, admin }
+}
