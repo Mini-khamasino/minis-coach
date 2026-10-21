@@ -161,8 +161,11 @@ export async function getSettings(): Promise<Settings> {
   const row = await db.kv.get('settings')
   return { ...DEFAULTS, ...(row?.value as Partial<Settings>) }
 }
-export async function saveSettings(patch: Partial<Settings>) {
-  await db.kv.put({ key: 'settings', value: { ...(await getSettings()), ...patch } })
+export function saveSettings(patch: Partial<Settings>) {
+  // one transaction per save, so quick taps (color, then theme…) can't overwrite each other with stale copies
+  return db.transaction('rw', db.kv, async () => {
+    await db.kv.put({ key: 'settings', value: { ...(await getSettings()), ...patch } })
+  })
 }
 export function useSettings(): Settings {
   return useLiveQuery(getSettings) ?? DEFAULTS

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle, Sparkles } from 'lucide-react'
 import { db, getSettings, DEFAULTS, DEMO } from './lib/db.ts'
@@ -6,9 +6,10 @@ import { useSync, takeJustSignedIn, useFeatures } from './lib/syncCore.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 // tabs other than Today load on first visit, so the app opens fast
-const Food = lazy(() => import('./components/Food.tsx').then((m) => ({ default: m.Food })))
-const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ default: m.Exercise })))
-const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
+const Food = memo(lazy(() => import('./components/Food.tsx').then((m) => ({ default: m.Food }))))
+const Exercise = memo(lazy(() => import('./components/Exercise.tsx').then((m) => ({ default: m.Exercise }))))
+const Coach = memo(lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach }))))
+const TodayTab = memo(Today)
 const AssistantSheet = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.AssistantSheet })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { ProfileSheet } from './components/ProfileSheet.tsx'
@@ -24,7 +25,9 @@ type Tab = (typeof TABS)[number]['id']
 
 export default function App() {
   const boot = useLiveQuery(async () => ({ s: await getSettings(), logged: await db.items.count() }))
-  const s = boot?.s ?? DEFAULTS
+  // the live query re-emits on any data change; keep the same settings object unless a setting really changed
+  const sKey = boot ? JSON.stringify(boot.s) : ''
+  const s = useMemo(() => boot?.s ?? DEFAULTS, [sKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const sync = useSync()
   const features = useFeatures(sync.user)
   const aiOn = features.ai && s.aiEnabled && !!sync.user
@@ -32,24 +35,27 @@ export default function App() {
   const [seen, setSeen] = useState<Set<Tab>>(() => new Set(['today']))
   const [settings, setSettings] = useState(false)
   const [assistant, setAssistant] = useState(false)
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? 'dark')
   const [compact, setCompact] = useState(false)
-
+  const [systemLight, setSystemLight] = useState(() => matchMedia('(prefers-color-scheme: light)').matches)
   useEffect(() => {
     const mq = matchMedia('(prefers-color-scheme: light)')
-    const apply = () => {
-      const t = s.theme === 'system' ? (mq.matches ? 'light' : 'dark') : s.theme
-      document.documentElement.dataset.theme = t
-      document.documentElement.dataset.accent = s.accent
-      document.documentElement.toggleAttribute('data-solid', !s.transparency)
-      document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'light' ? '#EBEBF0' : '#000000')
-      try { localStorage.setItem('theme', s.theme); localStorage.setItem('accent', s.accent) } catch { /* private mode */ }
-      setTheme(t)
-    }
-    apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [s.theme, s.accent, s.transparency])
+    const on = () => setSystemLight(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  const theme = s.theme === 'system' ? (systemLight ? 'light' : 'dark') : s.theme
+  // applied during render, before the tabs render, so anything reading the theme colors sees the new ones in the same pass
+  // (only once settings have loaded — until then index.html's saved theme/accent stay, so there's no flash of defaults)
+  if (boot) {
+    const root = document.documentElement
+    root.dataset.theme = theme
+    root.dataset.accent = s.accent
+    root.toggleAttribute('data-solid', !s.transparency)
+  }
+  useEffect(() => {
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', theme === 'light' ? '#EBEBF0' : '#000000')
+    try { localStorage.setItem('theme', s.theme); localStorage.setItem('accent', s.accent) } catch { /* private mode */ }
+  }, [theme, s.theme, s.accent])
 
   // Tab bar shrinks to icons while scrolling down, comes back on the way up (iOS 26 style).
   useEffect(() => {
@@ -79,7 +85,9 @@ export default function App() {
     if (signedIn && sync.status === 'synced' && takeJustSignedIn()) toast(L(`✅ دخلت باسم ${sync.user?.displayName ?? ''} — بياناتك متزامنة`, `✅ Signed in as ${sync.user?.displayName ?? ''} — data synced`))
   }, [signedIn, sync.status])
 
-  const go = (t: Tab) => { setTab(t); setSeen((s) => new Set(s).add(t)); scrollTo({ top: 0 }) }
+  const go = useCallback((t: Tab) => { setTab(t); setSeen((x) => new Set(x).add(t)); scrollTo({ top: 0 }) }, [])
+  const openSettings = useCallback(() => setSettings(true), [])
+  const openFood = useCallback(() => go('food'), [go])
 
   if (!boot) return null
   // A backup restore or cloud download counts as onboarded; so does an older install that already has food logged.
@@ -104,7 +112,7 @@ export default function App() {
       )}
 
       <main>
-        <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>
+        <div hidden={tab !== 'today'} className="fade-enter"><TodayTab s={s} theme={theme} signedIn={!!sync.user} onSettings={openSettings} onFood={openFood} /></div>
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
           {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>}
           {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>}

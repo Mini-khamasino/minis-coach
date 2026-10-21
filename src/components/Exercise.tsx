@@ -84,10 +84,16 @@ export function Exercise({ s }: { s: Settings }) {
 function BodyCard({ targets, recovering: rec, week, onMuscle }: { targets: Muscle[]; recovering: Muscle[]; week: Map<Muscle, number>; onMuscle: (m: Muscle) => void }) {
   const [mode, setMode] = useState<'today' | 'week'>('today')
   const [side, setSide] = useState<'anterior' | 'posterior'>('anterior')
-  const css = getComputedStyle(document.documentElement)
-  const accent = css.getPropertyValue('--color-accent').trim() || '#0a84ff'
-  const amber = css.getPropertyValue('--color-amber').trim() || '#ff9f0a'
-  const body = document.documentElement.dataset.theme === 'light' ? '#d1d1d6' : '#3a3a3f'
+  // read theme colors only when the theme or accent actually changes (getComputedStyle forces a full style recalc)
+  const { theme, accent: accentName } = document.documentElement.dataset
+  const { accent, amber, body } = useMemo(() => {
+    const css = getComputedStyle(document.documentElement)
+    return {
+      accent: css.getPropertyValue('--color-accent').trim() || '#0a84ff',
+      amber: css.getPropertyValue('--color-amber').trim() || '#ff9f0a',
+      body: theme === 'light' ? '#d1d1d6' : '#3a3a3f',
+    }
+  }, [theme, accentName])
   const mix = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, ${body})`
 
   // frequency picks the color: today → 1 recovering, 2+ target; week → set-volume buckets
