@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
 import { db, getSettings, DEFAULTS } from './lib/db.ts'
-import { useSync } from './lib/syncCore.ts'
+import { useSync, takeJustSignedIn } from './lib/syncCore.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 // tabs other than Today load on first visit, so the app opens fast
@@ -11,7 +11,7 @@ const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ d
 const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { SettingsSheet } from './components/SettingsSheet.tsx'
-import { Toaster, UpdatePrompt } from './components/ui.tsx'
+import { Toaster, UpdatePrompt, toast } from './components/ui.tsx'
 
 const TABS = [
   { id: 'today', label: L('النهارده', 'Today'), Icon: House },
@@ -68,11 +68,17 @@ export default function App() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', run) }
   }, [boot?.s.onboarded])
 
+  // say so when a sign-in completes (it can finish in a popup the person doesn't see close)
+  const signedIn = sync.user?.uid
+  useEffect(() => {
+    if (signedIn && sync.status === 'synced' && takeJustSignedIn()) toast(L(`✅ دخلت باسم ${sync.user?.displayName ?? ''} — بياناتك متزامنة`, `✅ Signed in as ${sync.user?.displayName ?? ''} — data synced`))
+  }, [signedIn, sync.status])
+
   const go = (t: Tab) => { setTab(t); setSeen((s) => new Set(s).add(t)); scrollTo({ top: 0 }) }
 
   if (!boot) return null
   // A backup restore or cloud download counts as onboarded; so does an older install that already has food logged.
-  if (!s.onboarded && !boot.logged) return <><Onboarding /><Toaster /></>
+  if (!s.onboarded && !boot.logged) return <><Onboarding sync={sync} /><Toaster /></>
 
   const title = tab === 'today' ? (s.name ? L(`أهلاً ${s.name}`, `Hi ${s.name}`) : "Mini's Coach") : TABS.find((x) => x.id === tab)!.label
   const avatar = sync.user?.photoURL

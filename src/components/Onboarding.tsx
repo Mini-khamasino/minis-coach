@@ -1,10 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { db, saveSettings, today, type GoalType, type Sex } from '../lib/db.ts'
 import { targetsFor } from '../lib/calc.ts'
 import { restore } from '../lib/backup.ts'
-import { signIn } from '../lib/syncCore.ts'
+import { signIn, type SyncState } from '../lib/syncCore.ts'
 import { L, lang } from '../lib/i18n.ts'
-import { Seg, toast } from './ui.tsx'
+import { Seg, GoogleButton, toast } from './ui.tsx'
 
 const ACTIVITY = [
   { v: 1.2, ar: 'قاعد معظم اليوم', en: 'Mostly sitting', subAr: 'مكتب، مذاكرة، مفيش رياضة', subEn: 'Desk/study, no training' },
@@ -19,11 +19,18 @@ const GOALS: { v: GoalType; ar: string; en: string; emoji: string }[] = [
   { v: 'bulk', ar: 'أزود عضل', en: 'Build muscle', emoji: '💪' },
 ]
 
-export function Onboarding() {
+export function Onboarding({ sync }: { sync: SyncState }) {
   const [step, setStep] = useState(0)
   const [p, setP] = useState({ name: '', sex: 'm' as Sex, age: '', heightCm: '', kg: '', activity: 1.375, goalType: 'cut' as GoalType, targetKg: '', trainDays: 3 })
   const file = useRef<HTMLInputElement>(null)
   const set = (patch: Partial<typeof p>) => setP({ ...p, ...patch })
+
+  // signed in but the cloud had nothing to restore → carry on with setup, name taken from Google
+  useEffect(() => {
+    if (sync.status !== 'synced' || !sync.user) return
+    setP((x) => (x.name ? x : { ...x, name: sync.user!.displayName?.split(' ')[0] ?? '' }))
+    setStep((st) => (st === 0 ? 1 : st))
+  }, [sync.status, sync.user])
 
   const nums = { age: Number(p.age), heightCm: Number(p.heightCm), kg: Number(p.kg) }
   const bodyOk = nums.age >= 12 && nums.age <= 90 && nums.heightCm >= 120 && nums.heightCm <= 230 && nums.kg >= 30 && nums.kg <= 300
@@ -59,9 +66,12 @@ export function Onboarding() {
           <h1 className="mb-2 text-[34px] leading-[1.05] font-bold tracking-tight">Mini's Coach</h1>
           <p className="mb-8 text-[17px] text-ink-2">{L('أكلك، تمرينك، ووزنك — في مكان واحد', 'Your food, training and weight — in one place')}</p>
           <Seg value={lang} onChange={switchLang} options={[['ar', 'عربي مصري'], ['en', 'English']]} />
-          <div className="mt-6 flex flex-col gap-2 text-[15px]">
-            <button className="press text-accent" onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))}>{L('عندي حساب — سجل دخول بجوجل', 'I have an account — sign in with Google')}</button>
-            <button className="press text-ink-2" onClick={() => file.current?.click()}>{L('عندي ملف باك أب', 'I have a backup file')}</button>
+          <div className="mt-8 flex w-full flex-col gap-3 text-[15px]">
+            {sync.user
+              ? <p className="rounded-full bg-fill py-3 font-medium">{sync.status === 'syncing' ? L('⏳ بنجيب بياناتك…', '⏳ Fetching your data…') : `✓ ${sync.user.displayName}`}</p>
+              : <GoogleButton label={L('المتابعة بحساب Google', 'Continue with Google')} onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))} />}
+            {!sync.user && <button className="press py-1 text-ink-2" onClick={() => setStep(1)}>{L('كمّل من غير حساب', 'Continue without an account')}</button>}
+            <button className="press py-1 text-[14px] text-ink-3" onClick={() => file.current?.click()}>{L('عندي ملف باك أب', 'I have a backup file')}</button>
             <input ref={file} type="file" accept="application/json,text/plain,.json,.txt" hidden onChange={(e) => { doRestore(e.target.files?.[0]); e.target.value = '' }} />
           </div>
         </>
@@ -160,7 +170,7 @@ export function Onboarding() {
         </div>
       )}
       <div key={step} className={`pop-enter flex-1 ${step === 0 ? 'flex flex-col items-center justify-center text-center' : ''}`}>{cur.body}</div>
-      <div className="flex gap-2">
+      <div className="flex gap-2" hidden={step === 0}>
         {step > 0 && <button className="press rounded-2xl bg-fill px-5 py-3.5 font-semibold" onClick={() => setStep(step - 1)}>{L('رجوع', 'Back')}</button>}
         <button className="press flex-1 rounded-2xl bg-accent py-3.5 text-[17px] font-semibold text-white disabled:opacity-40" disabled={!cur.ok}
           onClick={() => (last ? finish() : setStep(step + 1))}>

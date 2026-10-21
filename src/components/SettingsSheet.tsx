@@ -6,7 +6,7 @@ import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.t
 import { targetsFor } from '../lib/calc.ts'
 import { signIn, logOut, type SyncState } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
-import { Sheet, Seg, toast } from './ui.tsx'
+import { Sheet, Seg, GoogleButton, toast } from './ui.tsx'
 
 type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings]
 
@@ -84,9 +84,10 @@ export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncSta
               <button className="press rounded-xl px-3 py-1.5 text-[14px] text-red" onClick={() => logOut()}>{L('خروج', 'Sign out')}</button>
             </div>
           ) : (
-            <button className="press rounded-2xl bg-fill py-3 font-semibold" onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))}>
-              {L('سجل دخول بجوجل — بياناتك تتحفظ أونلاين', 'Sign in with Google — back up your data')}
-            </button>
+            <>
+              <GoogleButton label={L('المتابعة بحساب Google', 'Continue with Google')} onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))} />
+              <p className="text-center text-[12px] text-ink-3">{L('بياناتك تتحفظ أونلاين وترجع على أي موبايل', 'Your data is backed up and restores on any phone')}</p>
+            </>
           )}
         </Group>
       )}

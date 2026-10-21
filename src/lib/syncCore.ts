@@ -53,5 +53,12 @@ export function useSync(): SyncState {
 }
 
 // the popup must open inside the tap or the browser blocks it, so never wait for the module here
-export const signIn = () => (loaded ? loaded.signIn() : Promise.reject(new Error(L('لحظة بيحمّل… جرب تاني', 'Still loading — try again'))))
+export const signIn = () => {
+  if (!loaded) return Promise.reject(new Error(L('لحظة بيحمّل… جرب تاني', 'Still loading — try again')))
+  justSignedIn = true
+  return loaded.signIn()
+}
+// lets the app confirm a sign-in the person just did, without toasting on every launch
+let justSignedIn = false
+export const takeJustSignedIn = () => { const v = justSignedIn; justSignedIn = false; return v }
 export const logOut = () => loadSync().then((m) => m.logOut())
