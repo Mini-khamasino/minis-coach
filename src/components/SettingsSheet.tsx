@@ -4,7 +4,7 @@ import { CloudUpload, Download, Check } from 'lucide-react'
 import { db, saveSettings, ACCENTS, type Accent, type Settings } from '../lib/db.ts'
 import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.ts'
 import { targetsFor } from '../lib/calc.ts'
-import { signIn, logOut, pullFromCloud, type SyncState } from '../lib/syncCore.ts'
+import { signIn, logOut, pullFromCloud, backupNow, type SyncState } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
 import { Sheet, Seg, GoogleButton, toast } from './ui.tsx'
 
@@ -148,11 +148,23 @@ export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncSta
       <button className="press mb-6 w-full rounded-2xl bg-accent py-3 font-semibold text-white" onClick={save}>{L('حفظ', 'Save')}</button>
 
       <Group title={L('باك أب', 'Backup')}>
-        <p className="text-[13px] text-ink-2">{age === null ? L('لسه معملتش باك أب', 'No backup yet') : age === 0 ? L('آخر باك أب: النهارده', 'Last backup: today') : L(`آخر باك أب: من ${age} يوم`, `Last backup: ${age} days ago`)}</p>
-        <div className="flex gap-2">
-          <button className="press flex flex-1 items-center justify-center gap-2 rounded-2xl bg-fill py-3" onClick={doBackup}><CloudUpload size={18} /> {L('باك أب', 'Back up')}</button>
-          <button className="press flex flex-1 items-center justify-center gap-2 rounded-2xl bg-fill py-3" onClick={() => file.current?.click()}><Download size={18} /> {L('استرجاع', 'Restore')}</button>
-        </div>
+        {sync.user ? (
+          <>
+            <p className="text-[13px] text-ink-2">☁️ {L('كل حاجة بتتحفظ على حسابك أوتوماتيك أول بأول — مش محتاج تعمل حاجة.', 'Everything saves to your account automatically as you go — nothing to do.')}</p>
+            <button className="press flex items-center justify-center gap-2 rounded-2xl bg-fill py-3" onClick={async () => {
+              try { await backupNow(); await saveSettings({ lastBackup: Date.now() }); toast(L('☁️ اتحفظ على حسابك', '☁️ Saved to your account')) } catch (e) { toast(`⚠️ ${(e as Error).message}`) }
+            }}><CloudUpload size={18} /> {L('احفظ على الحساب دلوقتي', 'Back up to my account now')}</button>
+          </>
+        ) : (
+          <p className="text-[13px] text-amber">{L('سجل دخول فوق عشان بياناتك تتحفظ على حسابك. لحد كده هي على الموبايل ده بس.', 'Sign in above to back up to your account. Until then your data is only on this phone.')}</p>
+        )}
+        <details className="text-[14px]">
+          <summary className="cursor-pointer py-1 text-ink-2">{L('ملف (متقدم)', 'File (advanced)')}{age !== null ? ` · ${age === 0 ? L('آخر ملف النهارده', 'last file today') : L(`آخر ملف من ${age} يوم`, `last file ${age} days ago`)}` : ''}</summary>
+          <div className="mt-2 flex gap-2">
+            <button className="press flex flex-1 items-center justify-center gap-2 rounded-2xl bg-fill py-2.5" onClick={doBackup}><Download size={17} /> {L('صدّر ملف', 'Export file')}</button>
+            <button className="press flex flex-1 items-center justify-center gap-2 rounded-2xl bg-fill py-2.5" onClick={() => file.current?.click()}>{L('استرجع من ملف', 'Restore from file')}</button>
+          </div>
+        </details>
         <input ref={file} type="file" accept="application/json,text/plain,.json,.txt" hidden onChange={(e) => { doRestore(e.target.files?.[0]); e.target.value = '' }} />
       </Group>
 

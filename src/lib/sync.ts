@@ -67,6 +67,12 @@ export function watchAuth(cb: (s: SyncState) => void) {
   })
 }
 
+/** Settings → "back up now": push every record on this phone to the account. */
+export async function backupNow() {
+  if (!auth.currentUser) throw new Error('not signed in')
+  await uploadAll(auth.currentUser.uid)
+}
+
 /** Settings → "get my data from my account": pull the cloud copy into this phone (cloud wins on the same records). */
 export async function pullFromCloud() {
   if (!auth.currentUser) throw new Error('not signed in')

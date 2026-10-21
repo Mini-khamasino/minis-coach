@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { House, UtensilsCrossed, Dumbbell, MessageCircle } from 'lucide-react'
 import { db, getSettings, DEFAULTS } from './lib/db.ts'
-import { useSync, takeJustSignedIn, signIn } from './lib/syncCore.ts'
+import { useSync, takeJustSignedIn } from './lib/syncCore.ts'
 import { L } from './lib/i18n.ts'
 import { Today } from './components/Today.tsx'
 // tabs other than Today load on first visit, so the app opens fast
@@ -11,7 +11,7 @@ const Exercise = lazy(() => import('./components/Exercise.tsx').then((m) => ({ d
 const Coach = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.Coach })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { SettingsSheet } from './components/SettingsSheet.tsx'
-import { Toaster, UpdatePrompt, GoogleButton, toast } from './components/ui.tsx'
+import { Toaster, UpdatePrompt, toast } from './components/ui.tsx'
 
 const TABS = [
   { id: 'today', label: L('النهارده', 'Today'), Icon: House },
@@ -91,21 +91,6 @@ export default function App() {
           {avatar ? <img src={avatar} alt="" className="size-full object-cover" referrerPolicy="no-referrer" /> : (s.name || 'M').slice(0, 1).toUpperCase()}
         </button>
       </header>
-
-      {location.hostname === 'mini-khamasino.github.io' && (
-        <div className="card mb-4 flex flex-col gap-3">
-          <p className="font-semibold">📦 {L('التطبيق اتنقل لعنوان جديد', 'The app moved to a new address')}</p>
-          {sync.status === 'synced'
-            ? <p className="text-[14px] text-ink-2">✅ {L('بياناتك اتنقلت لحسابك. افتح التطبيق الجديد وسجل دخول بنفس الحساب.', 'Your data is in your account. Open the new app and sign in with the same account.')}</p>
-            : sync.user
-              ? <p className="text-[14px] text-ink-2">⏳ {L('بننقل بياناتك…', 'Moving your data…')}</p>
-              : <>
-                  <p className="text-[14px] text-ink-2">{L('سجل دخول هنا مرة واحدة وبياناتك هتتنقل لوحدها:', 'Sign in here once and your data moves by itself:')}</p>
-                  <GoogleButton label={L('المتابعة بحساب Google', 'Continue with Google')} onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))} />
-                </>}
-          <a className="press block rounded-2xl bg-accent py-2.5 text-center font-semibold text-white" href="https://minis-coach.web.app">{L('افتح التطبيق الجديد', 'Open the new app')}</a>
-        </div>
-      )}
 
       <main>
         <div hidden={tab !== 'today'} className="fade-enter"><Today s={s} theme={theme} signedIn={!!sync.user} onSettings={() => setSettings(true)} onFood={() => go('food')} /></div>

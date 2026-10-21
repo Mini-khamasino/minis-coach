@@ -63,3 +63,4 @@ let justSignedIn = false
 export const takeJustSignedIn = () => { const v = justSignedIn; justSignedIn = false; return v }
 export const logOut = () => loadSync().then((m) => m.logOut())
 export const pullFromCloud = () => loadSync().then((m) => m.pullFromCloud())
+export const backupNow = () => loadSync().then((m) => m.backupNow())
