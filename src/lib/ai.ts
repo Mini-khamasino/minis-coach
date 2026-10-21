@@ -51,7 +51,8 @@ Reply in ${lang === 'en' ? 'English' : 'Egyptian Arabic (عامية مصرية)'
 You never know the person's real name; when greeting, write {name} and the app fills it in. Never ask for personal identifying details.
 
 Actions — use the tools, don't just describe:
-- When they say they ate/drank something, call log_food. Give quantity+unit as they said it (e.g. 2 eggs, 1 loaf, 1 plate) or grams if they said grams; the app looks up calories in its own food table. Only add kcal_per_100 (and macros) for restaurant or unusual dishes the table won't have.
+- When they say they ate/drank something, call log_food. Give quantity+unit as they said it (e.g. 2 eggs, 1 loaf, 1 plate), grams only if they said grams, and ALWAYS estimated_grams (your best guess of the portion's weight) plus your per-100 g estimates (kcal_per_100, protein_per_100, carbs_per_100, fat_per_100) for EVERY item — Egyptian, Gulf, home-made, restaurant, desserts, anything. The app uses its own table when it knows the food and your numbers otherwise, so never refuse a food you know.
+- For "how many calories in X" questions, answer from the app's numbers if X was logged, otherwise from your own knowledge (say it's an estimate).
 - To change or remove something already logged today, use update_food with its id from today.items.
 - Water → log_water, weigh-in → log_weight, gym sets → log_sets, lasting facts about them (preferences, schedule, dislikes) → save_note.
 - Need another day's details → get_day.
@@ -68,7 +69,7 @@ const fn = (name: string, description: string, properties: object, required: str
 const TOOLS = [
   fn('log_food', 'Log foods/drinks the person ate.', {
     items: { type: 'array', items: { type: 'object', required: ['name'], properties: {
-      name: str, quantity: num, unit: str, grams: num, meal: { type: 'string', enum: MEALS },
+      name: str, quantity: num, unit: str, grams: { type: 'number', description: 'only if the person said grams' }, estimated_grams: num, meal: { type: 'string', enum: MEALS },
       kcal_per_100: num, protein_per_100: num, carbs_per_100: num, fat_per_100: num,
     } } },
   }, ['items']),
@@ -108,8 +109,11 @@ async function run(call: ToolCall, undo: Undo, receipt: string[]): Promise<strin
           item = { ...makeItem(d, meal, line.match.name, line.match.foodId, line.grams, line.match.per100, line.match.oily, false), acc: line.acc }
         } else if (clamp(it.kcal_per_100, 1, 950)) {
           const per100 = { kcal: it.kcal_per_100 as number, p: clamp(it.protein_per_100, 0, 100) ?? 0, c: clamp(it.carbs_per_100, 0, 100) ?? 0, f: clamp(it.fat_per_100, 0, 100) ?? 0 }
-          item = { ...makeItem(d, meal, name, null, grams ?? Math.round(150 * ((clamp(it.quantity, 0.1, 50) as number) || 1)), per100, false, true), acc: 'p' as const }
-        } else { out.push(`${name}: not found — ask them for grams or calories`); continue }
+          const g = grams ?? clamp(it.estimated_grams, 1, 3000) ?? Math.round(100 * ((clamp(it.quantity, 0.1, 50) as number) || 1))
+          item = { ...makeItem(d, meal, name, null, g, per100, false, true), acc: grams ? ('w' as const) : ('p' as const) }
+          // remember it, so next time it's found instantly (and offline); the person can correct it from the food list
+          if (!customs.some((c) => norm(c.name) === norm(name))) await db.customFoods.put({ name, per100 })
+        } else { out.push(`${name}: no estimate given — estimate kcal_per_100 yourself and call log_food again`); continue }
         const id = await db.items.add(item)
         undo.items.push(id as number)
         receipt.push(`${item.name} ${item.grams}g · ${item.kcal} kcal${item.estimated ? ' (~)' : ''}`)
