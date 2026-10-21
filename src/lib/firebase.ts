@@ -2,10 +2,10 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { initializeFirestore, persistentLocalCache } from 'firebase/firestore'
 
-// Same project as the Islam app; authDomain is this app's own site so sign-in works in iPhone home-screen apps.
+// Same project and same sign-in setup as the Islam app (popup via the project's default auth domain).
 const app = initializeApp({
   apiKey: 'AIzaSyAMibcjnnOckNgL-kUG3mPpdTVff3fFBpU',
-  authDomain: 'minis-coach.web.app',
+  authDomain: 'sirr-sibhah-67e7a.firebaseapp.com',
   projectId: 'sirr-sibhah-67e7a',
   storageBucket: 'sirr-sibhah-67e7a.firebasestorage.app',
   messagingSenderId: '556563100288',

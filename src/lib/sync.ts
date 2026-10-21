@@ -1,7 +1,7 @@
 // The heavy half of cloud sync (Firebase), loaded after first paint. Dexie stays the source of truth (offline,
 // instant); Firestore mirrors it per user at coachUsers/{uid}/{table}/{key}.
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore'
-import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, type User } from 'firebase/auth'
+import { signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth'
 import { db } from './db.ts'
 import { auth, fs, googleProvider } from './firebase.ts'
 import { setSender, setMuted, type Op, type SyncState } from './syncCore.ts'
@@ -68,7 +68,6 @@ export function watchAuth(cb: (s: SyncState) => void) {
   })
 }
 
-const isIosStandalone = () => (navigator as Navigator & { standalone?: boolean }).standalone === true
-
-export const signIn = () => (isIosStandalone() ? signInWithRedirect(auth, googleProvider) : signInWithPopup(auth, googleProvider))
+// same as the Islam app: always a popup
+export const signIn = () => signInWithPopup(auth, googleProvider)
 export const logOut = () => signOut(auth)

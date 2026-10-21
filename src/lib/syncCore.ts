@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import { db } from './db.ts'
+import { L } from './i18n.ts'
 
 export type Op = { t: string; key: unknown; obj?: object } // no obj = delete
 export type SyncState = { user: User | null; status: 'idle' | 'syncing' | 'synced' | 'error' }
@@ -51,6 +52,6 @@ export function useSync(): SyncState {
   return state
 }
 
-// sign-in must start inside the tap (popup blockers), so use the module directly once it has loaded
-export const signIn = () => (loaded ? loaded.signIn() : loadSync().then((m) => m.signIn()))
+// the popup must open inside the tap or the browser blocks it, so never wait for the module here
+export const signIn = () => (loaded ? loaded.signIn() : Promise.reject(new Error(L('لحظة بيحمّل… جرب تاني', 'Still loading — try again'))))
 export const logOut = () => loadSync().then((m) => m.logOut())
