@@ -6,7 +6,7 @@ compatibility_date = "2026-10-01"
 PROJECT = "sirr-sibhah-67e7a"
 ADMIN_EMAIL = "a.alimohammed2005@gmail.com"
 DAILY_CAP = "200"
-# tried in order; checked against Groq's model list at setup
-MODELS = "openai/gpt-oss-120b,llama-3.3-70b-versatile,qwen/qwen3-32b"
+# tried in order (Groq retired llama-3.3-70b and qwen3-32b in 2026); GET /models (admin) lists what the key can use
+MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.6-27b"
 
 # [[kv_namespaces]] added at setup (wrangler kv namespace create USAGE)

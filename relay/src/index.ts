@@ -20,7 +20,7 @@ let flagCache: { at: number; ai: boolean } | null = null
 const cors = (origin: string | null) => ({
   'Access-Control-Allow-Origin': origin && ORIGINS.includes(origin) ? origin : ORIGINS[0],
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Expose-Headers': 'X-Remaining, X-Model',
   Vary: 'Origin',
 })
@@ -43,7 +43,8 @@ export default {
       new Response(JSON.stringify(body), { status, headers: { ...h, ...extra, 'Content-Type': 'application/json' } })
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: h })
-    if (req.method !== 'POST' || new URL(req.url).pathname !== '/chat') return json({ error: 'not found' }, 404)
+    const path = new URL(req.url).pathname
+    if (!((req.method === 'POST' && path === '/chat') || (req.method === 'GET' && path === '/models'))) return json({ error: 'not found' }, 404)
     if (origin && !ORIGINS.includes(origin)) return json({ error: 'origin' }, 403)
 
     // 1. who is this? (Firebase ID token from the app)
@@ -60,6 +61,12 @@ export default {
 
     // 2. allowed? the admin always (test mode); everyone else once the AI switch is published
     const admin = email === env.ADMIN_EMAIL
+    if (path === '/models') {
+      if (!admin) return json({ error: 'admin only' }, 403)
+      const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${env.GROQ_KEY}` } })
+      const list = r.ok ? ((await r.json()) as { data: { id: string }[] }).data.map((m) => m.id).sort() : []
+      return json({ configured: env.MODELS.split(','), available: list })
+    }
     if (!admin && !(await aiPublished(env, token))) return json({ error: 'not available' }, 403)
 
     // 3. daily cap per person
