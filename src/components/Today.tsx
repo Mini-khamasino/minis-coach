@@ -1,15 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Undo2, CloudUpload, Share } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Undo2, CloudUpload, Share, SquarePlus, Download } from 'lucide-react'
 import { db, today, type Settings } from '../lib/db.ts'
 import { sum, zone, ZONE_COLOR } from '../lib/calc.ts'
 import { daysSinceBackup } from '../lib/backup.ts'
 import { L } from '../lib/i18n.ts'
-import { Ring, Bar, tick } from './ui.tsx'
+import { Ring, Bar, Sheet, tick, toast } from './ui.tsx'
+import { useInstall, promptInstall } from '../lib/install.ts'
 import { WeightCard } from './WeightCard.tsx'
 
 const BOTTLE = 750
-const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent)
-const installed = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
 
 export function macroTargets(s: Settings) {
   const fat = Math.round((s.goal * 0.27) / 9)
@@ -31,12 +31,7 @@ export function Today({ s, theme, signedIn, onSettings, onFood }: { s: Settings;
 
   return (
     <div className="flex flex-col gap-3">
-      {isIos && !installed && (
-        <div className="card flex items-center gap-3 !py-3">
-          <Share className="shrink-0 text-accent" size={22} />
-          <p className="text-[14px]">{L('ثبّت التطبيق: من Safari دوس Share ثم "Add to Home Screen"', 'Install: in Safari tap Share, then "Add to Home Screen"')}</p>
-        </div>
-      )}
+      <InstallCard />
       {!signedIn && (backupAge === null || backupAge >= 7) && (
         <button className="press card flex items-center gap-3 !py-3 text-start" onClick={onSettings}>
           <CloudUpload className="shrink-0 text-amber" size={22} />
@@ -92,5 +87,45 @@ function Bottle({ fill, onTap }: { fill: number; onTap: () => void }) {
       <div className="absolute inset-x-0 bottom-0 bg-teal/70" style={{ height: `${fill * 100}%`, transition: 'height 600ms var(--ease-spring)' }} />
       <div className="absolute inset-x-[30%] top-0 h-2 rounded-b bg-ink-3" />
     </button>
+  )
+}
+
+/** One tap installs on Android; on iPhone it opens a picture guide (Apple allows no automatic install). */
+function InstallCard() {
+  const mode = useInstall()
+  const [guide, setGuide] = useState(false)
+  if (!mode) return null
+  const tap = async () => {
+    if (mode === 'ios') return setGuide(true)
+    if (await promptInstall()) toast(L('✅ اتثبت — هتلاقيه على الشاشة الرئيسية', '✅ Installed — find it on your home screen'))
+  }
+  return (
+    <>
+      <button className="press card flex items-center gap-3 !py-3 text-start" onClick={tap}>
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-white"><Download size={20} /></span>
+        <span className="flex-1">
+          <span className="block font-semibold">{L('ثبّت التطبيق', 'Install the app')}</span>
+          <span className="text-[13px] text-ink-2">{L('يفتح أسرع، ملء الشاشة، وبياناتك متتمسحش', 'Opens faster, full screen, and your data stays safe')}</span>
+        </span>
+      </button>
+      {guide && (
+        <Sheet title={L('التثبيت على الآيفون', 'Install on iPhone')} onClose={() => setGuide(false)}>
+          <p className="mb-4 text-[14px] text-ink-2">{L('أبل مش بتسمح بزرار تثبيت تلقائي، بس هي 3 دوسات:', "Apple doesn't allow an automatic install button, but it's 3 taps:")}</p>
+          {[
+            [<Share key="s" size={22} />, L('دوس زرار المشاركة', 'Tap the Share button'), L('المربع اللي طالع منه سهم — تحت في نص الشاشة في Safari', 'The square with an arrow — bottom middle in Safari')],
+            [<SquarePlus key="p" size={22} />, L('اختار "إضافة إلى الشاشة الرئيسية"', 'Choose "Add to Home Screen"'), L('انزل في القايمة لو مش ظاهر', 'Scroll the list down if you don’t see it')],
+            [<Plus key="a" size={22} />, L('دوس "إضافة" فوق', 'Tap "Add" at the top'), L('خلاص — افتحه من الأيقونة على الشاشة', 'Done — open it from the home-screen icon')],
+          ].map(([icon, title, sub], i) => (
+            <div key={i} className="mb-3 flex items-center gap-3 rounded-2xl bg-fill p-3">
+              <span className="num grid size-9 shrink-0 place-items-center rounded-full bg-accent text-[15px] text-white">{i + 1}</span>
+              <span className="text-accent">{icon}</span>
+              <span className="flex-1"><span className="block font-medium">{title}</span><span className="text-[12px] text-ink-2">{sub}</span></span>
+            </div>
+          ))}
+          <p className="mt-2 text-center text-[28px] motion-safe:animate-bounce" aria-hidden>⬇️</p>
+          <p className="text-center text-[12px] text-ink-3">{L('زرار المشاركة تحت', 'The Share button is down there')}</p>
+        </Sheet>
+      )}
+    </>
   )
 }

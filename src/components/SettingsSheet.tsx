@@ -4,7 +4,7 @@ import { CloudUpload, Download, Check } from 'lucide-react'
 import { db, saveSettings, ACCENTS, type Accent, type Settings } from '../lib/db.ts'
 import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.ts'
 import { targetsFor } from '../lib/calc.ts'
-import { signIn, logOut, type SyncState } from '../lib/syncCore.ts'
+import { signIn, logOut, pullFromCloud, type SyncState } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
 import { Sheet, Seg, GoogleButton, toast } from './ui.tsx'
 
@@ -72,9 +72,9 @@ export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncSta
 
   return (
     <Sheet title={L('الإعدادات', 'Settings')} onClose={onClose}>
-      {location.hostname !== 'mini-khamasino.github.io' && (
-        <Group title={L('الحساب', 'Account')}>
+      <Group title={L('الحساب', 'Account')}>
           {sync.user ? (
+            <>
             <div className="flex items-center gap-3 rounded-2xl bg-fill p-3">
               {sync.user.photoURL && <img src={sync.user.photoURL} alt="" className="size-10 rounded-full" referrerPolicy="no-referrer" />}
               <div className="min-w-0 flex-1">
@@ -83,6 +83,11 @@ export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncSta
               </div>
               <button className="press rounded-xl px-3 py-1.5 text-[14px] text-red" onClick={() => logOut()}>{L('خروج', 'Sign out')}</button>
             </div>
+            <button className="press rounded-2xl bg-fill py-2.5 text-[14px] text-accent" onClick={async () => {
+              if (!confirm(L('هجيب بياناتك من الحساب وأحطها على الموبايل ده. كمّل؟', 'Bring your account data onto this phone?'))) return
+              try { await pullFromCloud(); toast(L('✅ بياناتك رجعت', '✅ Your data is here')) } catch (e) { toast(`⚠️ ${(e as Error).message}`) }
+            }}>⬇️ {L('هات بياناتي من الحساب', 'Get my data from my account')}</button>
+            </>
           ) : (
             <>
               <GoogleButton label={L('المتابعة بحساب Google', 'Continue with Google')} onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))} />
@@ -90,7 +95,6 @@ export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncSta
             </>
           )}
         </Group>
-      )}
 
       <Group title={L('المظهر', 'Appearance')}>
         <Seg value={s.theme} onChange={(theme) => saveSettings({ theme })} options={[['system', L('تلقائي', 'Auto')], ['dark', L('غامق', 'Dark')], ['light', L('فاتح', 'Light')]]} />

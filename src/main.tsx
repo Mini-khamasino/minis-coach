@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import './lib/install.ts' // first: catches the browser's install event before React mounts
 import './index.css'
 import App from './App.tsx'
 import { installSyncHooks } from './lib/syncCore.ts'

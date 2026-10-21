@@ -1,6 +1,6 @@
 // The heavy half of cloud sync (Firebase), loaded after first paint. Dexie stays the source of truth (offline,
 // instant); Firestore mirrors it per user at coachUsers/{uid}/{table}/{key}.
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
 import { signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth'
 import { db } from './db.ts'
 import { auth, fs, googleProvider } from './firebase.ts'
@@ -42,19 +42,18 @@ async function downloadAll(uid: string) {
   }
 }
 
-const hasLocalData = async () => (await db.items.count()) + (await db.weights.count()) > 0
-
-/** First sign-in on a phone: an empty cloud gets this phone's data; an empty phone gets the cloud's. */
+/**
+ * On every sign-in / app start, the food log decides who is the source:
+ * - cloud has no food log yet → this phone's data goes up (the first phone with history seeds the account)
+ * - this phone has no food log (fresh setup) → it takes the cloud copy, settings included
+ */
 async function reconcile(user: User) {
-  const meta = doc(fs, 'coachUsers', user.uid)
-  const snap = await getDoc(meta)
-  if (!snap.exists()) {
-    await uploadAll(user.uid)
-    await setDoc(meta, { createdAt: Date.now(), name: user.displayName ?? '', email: user.email ?? '' })
-  } else if (!(await hasLocalData())) {
-    await downloadAll(user.uid)
-  }
-  // shortcut: both sides have data → keep this phone's copy and sync forward (no merge); fine while it's one person per phone
+  const cloudHasLog = !(await getDocs(query(collection(fs, 'coachUsers', user.uid, 'items'), limit(1)))).empty
+  const localHasLog = (await db.items.count()) > 0
+  if (!cloudHasLog && localHasLog) await uploadAll(user.uid)
+  else if (cloudHasLog && !localHasLog) await downloadAll(user.uid)
+  // shortcut: both sides have a log → keep this phone's copy and sync forward (no merge); fine while it's one person per phone
+  await setDoc(doc(fs, 'coachUsers', user.uid), { name: user.displayName ?? '', email: user.email ?? '', seenAt: Date.now() }, { merge: true })
 }
 
 export function watchAuth(cb: (s: SyncState) => void) {
@@ -66,6 +65,12 @@ export function watchAuth(cb: (s: SyncState) => void) {
       (e) => { console.warn('sync', e); setSender(sender(user.uid)); cb({ user, status: 'error' }) },
     )
   })
+}
+
+/** Settings → "get my data from my account": pull the cloud copy into this phone (cloud wins on the same records). */
+export async function pullFromCloud() {
+  if (!auth.currentUser) throw new Error('not signed in')
+  await downloadAll(auth.currentUser.uid)
 }
 
 // same as the Islam app: always a popup
