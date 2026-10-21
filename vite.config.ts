@@ -6,8 +6,8 @@ import { readFileSync } from 'node:fs'
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
-// GitHub Pages serves the app at /<repo-name>/
-const base = '/minis-coach/'
+// Firebase Hosting serves at /; the old GitHub Pages build (until it's switched off) lives at /minis-coach/
+const base = process.env.GITHUB_ACTIONS ? '/minis-coach/' : '/'
 
 export default defineConfig({
   base,

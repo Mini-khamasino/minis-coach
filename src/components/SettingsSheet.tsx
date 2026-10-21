@@ -6,10 +6,11 @@ import { backup, prepareBackup, restore, daysSinceBackup } from '../lib/backup.t
 import { pickModel } from '../lib/coach.ts'
 import { mifflin } from '../lib/calc.ts'
 import { Sheet, toast } from './ui.tsx'
+import { signIn, logOut, type SyncState } from '../lib/sync.ts'
 
 type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings]
 
-export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void }) {
+export function SettingsSheet({ s, sync, onClose }: { s: Settings; sync: SyncState; onClose: () => void }) {
   const [form, setForm] = useState(s)
   const file = useRef<HTMLInputElement>(null)
   const notes = useLiveQuery(() => db.notes.toArray()) ?? []
@@ -72,6 +73,25 @@ export function SettingsSheet({ s, onClose }: { s: Settings; onClose: () => void
 
   return (
     <Sheet title="الإعدادات" onClose={onClose}>
+      {location.hostname !== 'mini-khamasino.github.io' && (
+        <Group title="الحساب">
+          {sync.user ? (
+            <div className="flex items-center gap-3 rounded-2xl bg-fill p-3">
+              {sync.user.photoURL && <img src={sync.user.photoURL} alt="" className="size-10 rounded-full" referrerPolicy="no-referrer" />}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{sync.user.displayName}</p>
+                <p className="text-[13px] text-ink-2">{{ idle: '', syncing: '⏳ بيزامن…', synced: '☁️ متزامن', error: '⚠️ المزامنة وقفت' }[sync.status]}</p>
+              </div>
+              <button className="press rounded-xl px-3 py-1.5 text-[14px] text-red" onClick={() => logOut()}>خروج</button>
+            </div>
+          ) : (
+            <button className="press rounded-2xl bg-fill py-3 font-semibold" onClick={() => signIn().catch((e: Error) => toast(`⚠️ ${e.message}`))}>
+              سجل دخول بجوجل — بياناتك تتحفظ أونلاين
+            </button>
+          )}
+        </Group>
+      )}
+
       <Group title="المظهر">
         <div className="flex gap-1 rounded-xl bg-fill p-1" role="radiogroup" aria-label="المظهر">
           {([['system', 'تلقائي'], ['dark', 'غامق'], ['light', 'فاتح']] as const).map(([v, label]) => (

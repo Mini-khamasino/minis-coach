@@ -1,0 +1,4 @@
+{
+  "projects": { "default": "sirr-sibhah-67e7a" },
+  "targets": { "sirr-sibhah-67e7a": { "hosting": { "minis-coach": ["minis-coach"] } } }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LayoutGrid, MessageCircle, Settings as Gear } from 'lucide-react'
 import { useSettings } from './lib/db.ts'
+import { useSync } from './lib/sync.ts'
 import { Dashboard } from './components/Dashboard.tsx'
 import { Coach } from './components/Coach.tsx'
 import { SettingsSheet } from './components/SettingsSheet.tsx'
@@ -10,6 +11,7 @@ type Tab = 'home' | 'coach'
 
 export default function App() {
   const s = useSettings()
+  const sync = useSync()
   const [tab, setTab] = useState<Tab>('home')
   const [settings, setSettings] = useState(false)
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? 'dark')
@@ -35,6 +37,18 @@ export default function App() {
         <button className="press glass grid size-10 place-items-center rounded-full" onClick={() => setSettings(true)} aria-label="الإعدادات"><Gear size={20} /></button>
       </header>
 
+      {location.hostname === 'mini-khamasino.github.io' && (
+        <div className="card mb-4 border-amber/40">
+          <p className="mb-2 font-semibold">📦 التطبيق اتنقل لعنوان جديد</p>
+          <ol className="mb-3 list-decimal ps-5 text-[14px] text-ink-2">
+            <li>افتح الإعدادات ⚙️ واعمل <b>باك أب</b> هنا الأول</li>
+            <li>افتح العنوان الجديد وسطّبه على الشاشة الرئيسية</li>
+            <li>هناك: الإعدادات ← <b>استرجاع</b> ← اختار الملف، وبعدين سجل دخول بجوجل</li>
+          </ol>
+          <a className="press block rounded-2xl bg-blue py-2.5 text-center font-semibold text-white" href="https://minis-coach.web.app">افتح minis-coach.web.app</a>
+        </div>
+      )}
+
       <main>
         <div hidden={tab !== 'home'} className="fade-enter"><Dashboard s={s} theme={theme} onSettings={() => setSettings(true)} /></div>
         <div hidden={tab !== 'coach'} className="fade-enter"><Coach hasKey={!!s.apiKey} onSettings={() => setSettings(true)} /></div>
@@ -49,7 +63,7 @@ export default function App() {
         ))}
       </nav>
 
-      {settings && <SettingsSheet s={s} onClose={() => setSettings(false)} />}
+      {settings && <SettingsSheet s={s} sync={sync} onClose={() => setSettings(false)} />}
       <Toaster />
       <UpdatePrompt />
     </div>
