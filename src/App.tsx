@@ -118,7 +118,7 @@ export default function App() {
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
           {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><ErrorBoundary tab="food"><Food s={s} /></ErrorBoundary></div>}
           {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><ErrorBoundary tab="exercise"><Exercise s={s} /></ErrorBoundary></div>}
-          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><ErrorBoundary tab="coach"><Coach visible={tab === 'coach'} aiOn={aiOn} /></ErrorBoundary></div>}
+          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><ErrorBoundary tab="coach"><Coach visible={tab === 'coach'} aiOn={aiOn} aiV2={features.aiV2} /></ErrorBoundary></div>}
         </Suspense>
       </main>
 
@@ -146,7 +146,7 @@ export default function App() {
           <Sparkles size={24} />
         </button>
       )}
-      {assistant && <Suspense fallback={null}><AssistantSheet aiOn={aiOn} onClose={() => setAssistant(false)} onOpenCoach={() => go('coach')} /></Suspense>}
+      {assistant && <Suspense fallback={null}><AssistantSheet aiOn={aiOn} aiV2={features.aiV2} onClose={() => setAssistant(false)} onOpenCoach={() => go('coach')} /></Suspense>}
       {settings && <ProfileSheet s={s} sync={sync} features={features} onClose={() => setSettings(false)} />}
       <Toaster />
       <UpdatePrompt />

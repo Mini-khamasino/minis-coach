@@ -52,6 +52,14 @@ export const loadSync = () => (mod ??= import('./sync.ts'))
 let loaded: typeof import('./sync.ts') | null = null
 loadSync().then((m) => { loaded = m })
 
+let activeFlags: Flags = { ai: false, feedback: false, library: false, routines: false, aiV2: false }
+let activeUser: User | null = null
+
+export function isAiV2(): boolean {
+  if (DEMO && activeUser?.email === ADMIN_EMAIL) return true
+  return activeFlags.aiV2
+}
+
 export function useSync(): SyncState {
   const [state, setState] = useState<SyncState>({ user: null, status: 'idle' })
   useEffect(() => {
@@ -97,6 +105,7 @@ export function useFeatures(user: User | null): Flags & { admin: boolean } {
     loadSync().then((m) => { if (alive) off = m.watchFlags(setFlags) })
     return () => { alive = false; off?.() }
   }, [uid])
+  useEffect(() => { activeFlags = flags; activeUser = user }, [flags, user])
   const admin = user?.email === ADMIN_EMAIL
   const allForAdmin = DEMO && admin
   return {

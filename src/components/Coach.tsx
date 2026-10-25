@@ -9,24 +9,24 @@ import { Sheet, toast } from './ui.tsx'
 const REACTIONS = ['👍', '❤️', '😅', '💪', '👎']
 
 /** Send one message: to the AI when it's on (gated for privacy on the phone), otherwise to the built-in answerer. */
-function useSend(aiOn: boolean) {
+function useSend(aiOn: boolean, aiV2?: boolean) {
   const [busy, setBusy] = useState(false)
   const send = async (q: string) => {
     if (!q.trim() || busy) return
     if (!aiOn) return ask(q)
     setBusy(true)
-    try { await (await import('../lib/ai.ts')).chat(q) } finally { setBusy(false) }
+    try { await (await import('../lib/ai.ts')).chat(q, { aiV2 }) } finally { setBusy(false) }
   }
   return { busy, send }
 }
 
 /** The coach writes; the person reacts, taps a quick reply, or asks / tells it anything. Reads top-to-bottom like a chat. */
-export function Coach({ visible, aiOn }: { visible: boolean; aiOn: boolean }) {
+export function Coach({ visible, aiOn, aiV2 }: { visible: boolean; aiOn: boolean; aiV2?: boolean }) {
   const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray().then((a) => a.reverse())) ?? []
   const [q, setQ] = useState('')
   const [promptQ, setPromptQ] = useState('')
   const end = useRef<HTMLDivElement>(null)
-  const { busy, send: sendNow } = useSend(aiOn)
+  const { busy, send: sendNow } = useSend(aiOn, aiV2)
   useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length, busy])
   const send = () => { sendNow(q); setQ('') }
   const lastShare = useLiveQuery(() => db.kv.get('lastAiShare'))?.value as number | undefined
@@ -182,10 +182,10 @@ function AiSheet({ mode, initialQ = '', onClose }: { mode: 'full' | 'update'; in
 }
 
 /** ✨ from any tab: the last few exchanges and a box to tell the coach anything. */
-export function AssistantSheet({ aiOn, onClose, onOpenCoach }: { aiOn: boolean; onClose: () => void; onOpenCoach: () => void }) {
+export function AssistantSheet({ aiOn, aiV2, onClose, onOpenCoach }: { aiOn: boolean; aiV2?: boolean; onClose: () => void; onOpenCoach: () => void }) {
   const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(6).toArray().then((a) => a.reverse().filter((m) => ['ask', 'ai', 'private', 'answer'].includes(m.kind)))) ?? []
   const [q, setQ] = useState('')
-  const { busy, send } = useSend(aiOn)
+  const { busy, send } = useSend(aiOn, aiV2)
   return (
     <Sheet title={L('✨ الكوتش', '✨ Coach')} onClose={onClose}>
       <div className="flex flex-col gap-2.5 pb-3">

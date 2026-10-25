@@ -44,7 +44,17 @@ export interface CoachMessage {
   read: boolean
   /** AI replies: what was logged, and how to reverse it */
   receipt?: string[]
-  undo?: { items: number[]; water: number[]; weights: { date: string; prevKg: number | null }[]; workouts: number[]; notes: number[]; restore: Item[]; restoreWorkout: Workout[] }
+  undo?: {
+    items: number[]
+    water: number[]
+    weights: { date: string; prevKg: number | null }[]
+    workouts: number[]
+    notes: number[]
+    restore: Item[]
+    restoreWorkout: Workout[]
+    routines?: string[]
+    prevTargets?: { kcal?: number; protein?: number; waterGoal?: number }
+  }
   undone?: boolean
   remaining?: number
   /** kept-on-phone questions (privacy gate) */

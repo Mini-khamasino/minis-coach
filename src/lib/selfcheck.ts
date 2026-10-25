@@ -12,6 +12,15 @@ import { mapDatasetMuscles, classifyPlace, activityKcal, searchLibrary, type Lib
 import { nextSession, routineToWorkout, templateFromProgram } from './routines.ts'
 import type { Routine } from './db.ts'
 import { DEFAULTS } from './db.ts'
+import {
+  summarizeRecentChat,
+  validateFoodInfoArgs,
+  validateSearchExercisesArgs,
+  validateCreateRoutineArgs,
+  validateLogActivityArgs,
+  validateSetTargetsArgs,
+  validateGetHistoryArgs,
+} from './aiHelpers.ts'
 
 // plain item: 200 g rice at 130/100 → 260
 assert.deepEqual(compute(FOODS.rice, 200, false), { kcal: 260, p: 5.4, c: 56, f: 0.6 })
@@ -202,6 +211,80 @@ assert.equal(wkFromRoutine.exercises[0].sets.length, 3)
 const templates = templateFromProgram(PROGRAMS[0])
 assert.ok(templates.length > 0)
 assert.equal(templates[0].exercises[0].ref.kind, 'legacy')
+
+// ── AI v2 tests ──
+
+// 1. summarizeRecentChat
+const chatMsgs = [
+  { kind: 'ask', text: '5 days ago question', date: '2026-10-20' },
+  { kind: 'ask', text: 'what should I eat for dinner?', date: '2026-10-22' },
+  { kind: 'ai', text: 'try grilled chicken breast with white rice', date: '2026-10-22' },
+  { kind: 'ask', text: 'my knee hurts after squats', date: '2026-10-23' },
+  { kind: 'ask', text: 'can I substitute leg press?', date: '2026-10-23' },
+  { kind: 'ask', text: 'logged 200g yogurt', date: '2026-10-24' },
+  { kind: 'ask', text: 'today question', date: '2026-10-25' },
+]
+const summary = summarizeRecentChat(chatMsgs, '2026-10-25')
+assert.ok(summary.includes('2026-10-22'))
+assert.ok(summary.includes('what should I eat for dinner?'))
+assert.ok(summary.includes('2026-10-23'))
+assert.ok(summary.includes('knee hurts'))
+assert.ok(summary.includes('2026-10-24'))
+assert.ok(!summary.includes('5 days ago'))
+assert.ok(!summary.includes('today question'))
+assert.equal(summary.split('\n').length, 3)
+assert.equal(summarizeRecentChat([], '2026-10-25'), '')
+
+// 2. validateFoodInfoArgs
+assert.deepEqual(validateFoodInfoArgs({ names: ['chicken', 'rice'] }), { names: ['chicken', 'rice'] })
+assert.equal(validateFoodInfoArgs({ names: [] }), null)
+assert.equal(validateFoodInfoArgs(null), null)
+assert.equal(validateFoodInfoArgs({ names: 'invalid' }), null)
+
+// 3. validateSearchExercisesArgs
+const searchArgs = validateSearchExercisesArgs({ query: '  bench press  ', place: 'gym', muscle: 'chest' })
+assert.equal(searchArgs.query, 'bench press')
+assert.equal(searchArgs.place, 'gym')
+assert.equal(searchArgs.muscle, 'chest')
+assert.equal(validateSearchExercisesArgs({ query: 'squat', place: 'invalid' }).place, undefined)
+
+// 4. validateCreateRoutineArgs
+const validRoutine = validateCreateRoutineArgs({
+  name: 'Push Day',
+  schedule: { mode: 'days', days: [0, 2, 4], time: '18:00' },
+  exercises: [
+    { id: 'bench_press', sets: 50, reps: 150, kg: 80, restSec: 90 },
+  ],
+})
+assert.ok(validRoutine)
+assert.equal(validRoutine.name, 'Push Day')
+assert.equal(validRoutine.exercises[0].sets, 15) // clamped from 50 to 15
+assert.equal(validRoutine.exercises[0].reps, 100) // clamped from 150 to 100
+assert.equal(validRoutine.exercises[0].kg, 80)
+assert.equal(validateCreateRoutineArgs({ name: '', exercises: [] }), null)
+assert.equal(validateCreateRoutineArgs({ name: 'Valid', exercises: [] }), null)
+
+// 5. validateLogActivityArgs
+const validAct = validateLogActivityArgs({ name: 'جري', minutes: 1200, distance_km: 5 })
+assert.ok(validAct)
+assert.equal(validAct.name, 'جري')
+assert.equal(validAct.minutes, 600) // clamped from 1200 to 600
+assert.equal(validAct.distance_km, 5)
+assert.equal(validateLogActivityArgs({ name: '', minutes: 30 }), null)
+assert.equal(validateLogActivityArgs({ name: 'walking', minutes: -5 }), null)
+
+// 6. validateSetTargetsArgs
+const validTargets = validateSetTargetsArgs({ kcal: 15000, protein: 180 })
+assert.ok(validTargets)
+assert.equal(validTargets.kcal, 8000) // clamped from 15000 to 8000
+assert.equal(validTargets.protein, 180)
+assert.equal(validTargets.water, undefined)
+assert.equal(validateSetTargetsArgs({}), null)
+
+// 7. validateGetHistoryArgs
+assert.equal(validateGetHistoryArgs({ days: 10 }).days, 10)
+assert.equal(validateGetHistoryArgs({ days: 100 }).days, 30) // clamped to 30
+assert.equal(validateGetHistoryArgs({}).days, 7) // default 7
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)
