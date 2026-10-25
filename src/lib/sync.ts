@@ -2,7 +2,10 @@
 // instant); Firestore mirrors it per user at coachUsers/{uid}/{table}/{key}.
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch, query, limit, onSnapshot } from 'firebase/firestore'
 import { signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth'
-import { db, DEMO } from './db.ts'
+import { db, DEMO, type FeedbackQueueItem } from './db.ts'
+import { captureError } from './reports.ts'
+
+const SKIP_SYNC_TABLES = new Set(['reports', 'feedbackQueue'])
 import { auth, fs, googleProvider } from './firebase.ts'
 import { setSender, setMuted, type Op, type SyncState, type Flags } from './syncCore.ts'
 
@@ -19,6 +22,7 @@ const sender = (uid: string) => (op: Op) => {
 
 async function uploadAll(uid: string) {
   for (const table of db.tables) {
+    if (SKIP_SYNC_TABLES.has(table.name)) continue
     const rows = await table.toArray()
     for (let i = 0; i < rows.length; i += 400) {
       const batch = writeBatch(fs)
@@ -29,10 +33,11 @@ async function uploadAll(uid: string) {
 }
 
 async function downloadAll(uid: string) {
-  const data = await Promise.all(db.tables.map(async (t) => [t, (await getDocs(collection(fs, 'coachUsers', uid, t.name))).docs.map((d) => d.data())] as const))
+  const syncTables = db.tables.filter((t) => !SKIP_SYNC_TABLES.has(t.name))
+  const data = await Promise.all(syncTables.map(async (t) => [t, (await getDocs(collection(fs, 'coachUsers', uid, t.name))).docs.map((d) => d.data())] as const))
   setMuted(true)
   try {
-    await db.transaction('rw', db.tables, async () => {
+    await db.transaction('rw', syncTables, async () => {
       for (const [t, rows] of data) if (rows.length) await t.bulkPut(rows)
     })
     const s = await db.kv.get('settings')
@@ -63,8 +68,8 @@ export function watchAuth(cb: (s: SyncState) => void) {
     if (DEMO) { setSender(null); return cb({ user, status: 'idle' }) }
     cb({ user, status: 'syncing' })
     reconcile(user).then(
-      () => { setSender(sender(user.uid)); cb({ user, status: 'synced' }) },
-      (e) => { console.warn('sync', e); setSender(sender(user.uid)); cb({ user, status: 'error' }) },
+      () => { setSender(sender(user.uid)); cb({ user, status: 'synced' }); flushReports().catch(() => {}) },
+      (e) => { console.warn('sync', e); captureError(e, 'sync'); setSender(sender(user.uid)); cb({ user, status: 'error' }) },
     )
   })
 }
@@ -87,9 +92,106 @@ export const logOut = () => signOut(auth)
 
 // ── published features: coachConfig/features, readable by signed-in users, writable only by the admin (Firestore rules) ──
 export function watchFlags(cb: (f: Flags) => void) {
-  return onSnapshot(doc(fs, 'coachConfig', 'features'), (snap) => cb({ ai: false, ...(snap.data() as Partial<Flags> | undefined) }), () => cb({ ai: false }))
+  const defaults: Flags = { ai: false, feedback: false, library: false, routines: false, aiV2: false }
+  return onSnapshot(doc(fs, 'coachConfig', 'features'), (snap) => cb({ ...defaults, ...(snap.data() as Partial<Flags> | undefined) }), () => cb(defaults))
 }
 export const setFlag = (name: keyof Flags, on: boolean) => setDoc(doc(fs, 'coachConfig', 'features'), { [name]: on }, { merge: true })
 
 /** Fresh Firebase sign-in token for the AI relay. */
 export const idToken = () => auth.currentUser?.getIdToken() ?? Promise.resolve(null)
+
+export async function flushReports() {
+  const user = auth.currentUser
+  if (!user || DEMO) return
+  const queued = await db.feedbackQueue.toArray()
+  for (const item of queued) {
+    try {
+      const docRef = doc(collection(fs, 'coachFeedback'))
+      await setDoc(docRef, {
+        kind: 'feedback',
+        type: item.type,
+        text: item.text.slice(0, 2000),
+        doing: item.doing ? item.doing.slice(0, 500) : '',
+        version: item.version,
+        ua: (item.ua || '').slice(0, 250),
+        recentReports: item.recentReports || [],
+        uid: user.uid,
+        createdAt: item.ts,
+      })
+      if (item.id !== undefined) await db.feedbackQueue.delete(item.id)
+    } catch (e) {
+      console.warn('flush feedback failed', e)
+      break
+    }
+  }
+
+  const unsent = await db.reports.filter((r) => !r.sent).toArray()
+  for (const r of unsent) {
+    try {
+      const docRef = doc(collection(fs, 'coachFeedback'))
+      await setDoc(docRef, {
+        kind: 'report',
+        key: r.key,
+        message: r.message.slice(0, 500),
+        stack: (r.stack || '').slice(0, 1000),
+        version: r.version || '',
+        tab: r.tab || '',
+        ua: (r.ua || '').slice(0, 250),
+        firstAt: r.firstAt,
+        lastAt: r.lastAt,
+        count: r.count,
+        uid: user.uid,
+        createdAt: Date.now(),
+      })
+      await db.reports.update(r.key, { sent: true })
+    } catch (e) {
+      console.warn('flush reports failed', e)
+      break
+    }
+  }
+}
+
+export async function sendFeedback(data: { type: 'bug' | 'idea' | 'other'; text: string; doing?: string }) {
+  const recent = await db.reports.orderBy('lastAt').reverse().limit(3).toArray()
+  const item: FeedbackQueueItem = {
+    type: data.type,
+    text: data.text.trim(),
+    doing: data.doing ? data.doing.trim() : undefined,
+    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.5.2',
+    ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    recentReports: recent.map((r) => r.key),
+    ts: Date.now(),
+  }
+  await db.feedbackQueue.add(item)
+  await flushReports()
+}
+
+export async function getFeedback() {
+  const snap = await getDocs(collection(fs, 'coachFeedback'))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function clearFeedback(ids: string[]) {
+  for (let i = 0; i < ids.length; i += 400) {
+    const batch = writeBatch(fs)
+    for (const id of ids.slice(i, i + 400)) {
+      batch.delete(doc(fs, 'coachFeedback', id))
+    }
+    await batch.commit()
+  }
+}
+
+export async function summarizeFeedback(items: unknown[]): Promise<{ summary: string; taskPrompt: string }> {
+  const token = await idToken()
+  if (!token) throw new Error('not signed in')
+  const res = await fetch('https://minis-coach-ai.minis-coach-relay.workers.dev/summarize', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(err.error || `summarize failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ summary: string; taskPrompt: string }>
+}

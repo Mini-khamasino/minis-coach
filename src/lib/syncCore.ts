@@ -7,7 +7,15 @@ import { L } from './i18n.ts'
 
 export type Op = { t: string; key: unknown; obj?: object } // no obj = delete
 export type SyncState = { user: User | null; status: 'idle' | 'syncing' | 'synced' | 'error' }
-export type Flags = { ai: boolean }
+export type Flags = {
+  ai: boolean
+  feedback: boolean
+  library: boolean
+  routines: boolean
+  aiV2: boolean
+}
+
+const LOCAL_ONLY_TABLES = new Set(['reports', 'feedbackQueue'])
 
 let queue: Op[] = []
 let send: ((op: Op) => void) | null = null
@@ -32,6 +40,7 @@ export function installSyncHooks() {
   if (DEMO) return // sandbox data never syncs
   for (const table of db.tables) {
     const t = table.name
+    if (LOCAL_ONLY_TABLES.has(t)) continue
     table.hook('creating', function (_pk, obj) { this.onsuccess = (key) => emit({ t, key, obj }) })
     table.hook('updating', function (_mods, key) { this.onsuccess = (updated) => emit({ t, key, obj: updated }) })
     table.hook('deleting', function (key) { this.onsuccess = () => emit({ t, key }) })
@@ -68,21 +77,34 @@ export const pullFromCloud = () => loadSync().then((m) => m.pullFromCloud())
 export const backupNow = () => loadSync().then((m) => m.backupNow())
 export const setFlag = (name: keyof Flags, on: boolean) => loadSync().then((m) => m.setFlag(name, on))
 export const idToken = () => loadSync().then((m) => m.idToken())
+export const sendFeedback = (data: { type: 'bug' | 'idea' | 'other'; text: string; doing?: string }) => loadSync().then((m) => m.sendFeedback(data))
+export const flushReports = () => loadSync().then((m) => m.flushReports())
+export const getFeedback = () => loadSync().then((m) => m.getFeedback())
+export const clearFeedback = (ids: string[]) => loadSync().then((m) => m.clearFeedback(ids))
+export const summarizeFeedback = (items: unknown[]) => loadSync().then((m) => m.summarizeFeedback(items))
 
 /**
  * Which features this person gets: published ones for everyone; in test mode the admin gets every unreleased feature.
  * Signed-out people get nothing that needs the network (the AI relay requires sign-in anyway).
  */
 export function useFeatures(user: User | null): Flags & { admin: boolean } {
-  const [flags, setFlags] = useState<Flags>({ ai: false })
+  const [flags, setFlags] = useState<Flags>({ ai: false, feedback: false, library: false, routines: false, aiV2: false })
   const uid = user?.uid
   useEffect(() => {
-    if (!uid) return setFlags({ ai: false })
+    if (!uid) return setFlags({ ai: false, feedback: false, library: false, routines: false, aiV2: false })
     let off: (() => void) | undefined
     let alive = true
     loadSync().then((m) => { if (alive) off = m.watchFlags(setFlags) })
     return () => { alive = false; off?.() }
   }, [uid])
   const admin = user?.email === ADMIN_EMAIL
-  return { ai: (DEMO && admin) || flags.ai, admin }
+  const allForAdmin = DEMO && admin
+  return {
+    ai: allForAdmin || flags.ai,
+    feedback: allForAdmin || flags.feedback,
+    library: allForAdmin || flags.library,
+    routines: allForAdmin || flags.routines,
+    aiV2: allForAdmin || flags.aiV2,
+    admin,
+  }
 }

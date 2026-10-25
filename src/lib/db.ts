@@ -50,16 +50,66 @@ export interface CoachMessage {
   /** kept-on-phone questions (privacy gate) */
   privateQ?: string
 }
-export interface WorkoutSet { kg: number; reps: number; done: boolean }
+export interface WorkoutSet { kg: number; reps: number; done: boolean; seconds?: number; meters?: number; kcal?: number }
 export interface Workout {
   id?: number
   date: string
   startedAt: number
   endedAt?: number
   programId: string
+  routineId?: string
   dayIndex: number
   exercises: { exId: string; sets: WorkoutSet[] }[]
 }
+export interface ErrorReport {
+  key: string
+  message: string
+  stack: string
+  version: string
+  tab: string
+  ua: string
+  firstAt: number
+  lastAt: number
+  count: number
+  sent: boolean
+}
+
+export interface FeedbackQueueItem {
+  id?: number
+  type: 'bug' | 'idea' | 'other'
+  text: string
+  doing?: string
+  version: string
+  ua: string
+  recentReports?: string[]
+  ts: number
+}
+
+export interface RoutineExercise {
+  ref: { kind: 'lib' | 'activity' | 'legacy'; id: string }
+  type: 'reps' | 'time' | 'distance'
+  sets: number
+  reps?: number
+  kg?: number
+  seconds?: number
+  meters?: number
+  restSec: number
+  notes?: string
+}
+
+export interface Routine {
+  id: string
+  name: string
+  schedule: {
+    mode: 'days' | 'rotation'
+    days: number[]
+    time?: string
+  }
+  exercises: RoutineExercise[]
+  createdAt: number
+  updatedAt: number
+}
+
 interface KV { key: string; value: unknown }
 
 /** Test mode (admin only): a separate sandbox database with sample data that never syncs. Switching reloads the app. */
@@ -77,6 +127,9 @@ export const db = new Dexie(DEMO ? 'minis-coach-demo' : 'minis-coach') as Dexie 
   meals: EntityTable<SavedMeal, 'id'>
   workouts: EntityTable<Workout, 'id'>
   messages: EntityTable<CoachMessage, 'id'>
+  reports: EntityTable<ErrorReport, 'key'>
+  feedbackQueue: EntityTable<FeedbackQueueItem, 'id'>
+  routines: EntityTable<Routine, 'id'>
 }
 db.version(1).stores({
   items: '++id, date',
@@ -90,6 +143,11 @@ db.version(1).stores({
 db.version(2).stores({ meals: '++id' })
 db.version(3).stores({ workouts: '++id, date' })
 db.version(4).stores({ messages: '++id, &key, date' })
+db.version(5).stores({
+  reports: 'key',
+  feedbackQueue: '++id',
+  routines: 'id',
+})
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 
@@ -107,6 +165,7 @@ export interface Settings {
   trainDays: number
   place: 'gym' | 'home'
   programId: string
+  routineId?: string
   restSec: number
   lang: 'ar' | 'en'
   accent: Accent
@@ -136,6 +195,7 @@ export const DEFAULTS: Settings = {
   trainDays: 3,
   place: 'gym',
   programId: '',
+  routineId: '',
   restSec: 90,
   lang: 'ar',
   accent: 'blue',

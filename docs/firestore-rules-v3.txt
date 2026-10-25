@@ -1,0 +1,20 @@
+// Mini's Coach v3: Firestore security rules to merge into Islam app/firestore.rules
+
+// 1. Feedback & Error Reports collection: coachFeedback/{id}
+match /coachFeedback/{id} {
+  // Any signed-in user can submit feedback or error reports with field/size validation
+  allow create: if request.auth != null
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.kind in ['feedback', 'report']
+    && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 2000))
+    && (!('message' in request.resource.data) || (request.resource.data.message is string && request.resource.data.message.size() <= 500))
+    && (!('stack' in request.resource.data) || (request.resource.data.stack is string && request.resource.data.stack.size() <= 1000))
+    && (!('doing' in request.resource.data) || (request.resource.data.doing is string && request.resource.data.doing.size() <= 500))
+    && (!('ua' in request.resource.data) || (request.resource.data.ua is string && request.resource.data.ua.size() <= 250));
+
+  // Only admin can read, list, and delete feedback items
+  allow read, delete: if request.auth != null && request.auth.token.email == 'a.alimohammed2005@gmail.com';
+
+  // No client-side updates allowed
+  allow update: if false;
+}

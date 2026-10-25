@@ -44,7 +44,7 @@ export default {
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: h })
     const path = new URL(req.url).pathname
-    if (!((req.method === 'POST' && path === '/chat') || (req.method === 'GET' && path === '/models'))) return json({ error: 'not found' }, 404)
+    if (!((req.method === 'POST' && path === '/chat') || (req.method === 'GET' && path === '/models') || (req.method === 'POST' && path === '/summarize'))) return json({ error: 'not found' }, 404)
     if (origin && !ORIGINS.includes(origin)) return json({ error: 'origin' }, 403)
 
     // 1. who is this? (Firebase ID token from the app)
@@ -66,6 +66,50 @@ export default {
       const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${env.GROQ_KEY}` } })
       const list = r.ok ? ((await r.json()) as { data: { id: string }[] }).data.map((m) => m.id).sort() : []
       return json({ configured: env.MODELS.split(','), available: list })
+    }
+    if (path === '/summarize') {
+      if (!admin) return json({ error: 'admin only' }, 403)
+      const body = await req.text()
+      if (body.length > 100_000) return json({ error: 'too long' }, 413)
+      const { items } = JSON.parse(body) as { items: unknown[] }
+      if (!items?.length) return json({ summary: 'No feedback items found.', taskPrompt: '' })
+
+      const prompt = `You analyze feedback and error reports for "Mini's Coach".
+Items:
+${JSON.stringify(items, null, 2).slice(0, 30000)}
+
+Return JSON with:
+1. "summary": structured summary in Arabic and English (ranked bugs, feature requests, quick wins).
+2. "taskPrompt": actionable prompt for Claude/Gemini to fix bugs and build requests.
+
+Format: {"summary": "...", "taskPrompt": "..."}`
+
+      let last = 0
+      for (const model of env.MODELS.split(',')) {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${env.GROQ_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+            temperature: 0.2,
+            max_tokens: 2048,
+          }),
+        })
+        last = r.status
+        if (r.status === 429 || r.status >= 500 || r.status === 413) continue
+        if (!r.ok) return json({ error: `ai ${r.status}` }, 502)
+        const data = (await r.json()) as { choices: { message: { content: string } }[] }
+        const raw = data.choices[0].message.content
+        try {
+          const parsed = JSON.parse(raw)
+          return json({ summary: parsed.summary || raw, taskPrompt: parsed.taskPrompt || '' })
+        } catch {
+          return json({ summary: raw, taskPrompt: raw })
+        }
+      }
+      return json({ error: last === 429 ? 'busy' : `ai ${last}` }, 503)
     }
     if (!admin && !(await aiPublished(env, token))) return json({ error: 'not available' }, 403)
 

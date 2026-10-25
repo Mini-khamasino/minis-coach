@@ -7,6 +7,7 @@ import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
 import { generate, advice, answer } from './coach.ts'
 import { sensitivity } from './privacy.ts'
+import { reportKey } from './reports.ts'
 import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
@@ -135,6 +136,11 @@ assert.equal(sensitivity('I take metformin, is that ok?'), 'private')
 assert.equal(sensitivity('بستفرغ بعد الأكل عشان مزيدش'), 'eating')
 assert.equal(sensitivity('I make myself vomit after dinner'), 'eating')
 assert.equal(sensitivity('مش عايز أعيش وعايز اموت'), 'crisis')
+
+// ── reports dedupe key ──
+assert.equal(reportKey('network timeout', 'Error: network timeout\n    at fetch (app.js:10:5)'), 'network timeout|at fetch (app.js:10:5)')
+assert.equal(reportKey('simple error'), 'simple error')
+assert.equal(reportKey('same err', 'at line1\nat line2'), reportKey('same err', 'at line1\nat line3'))
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

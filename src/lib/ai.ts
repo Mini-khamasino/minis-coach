@@ -7,6 +7,7 @@ import { nextDayIndex } from './training.ts'
 import { idToken } from './syncCore.ts'
 import { lang } from './i18n.ts'
 import { sensitivity, type Sensitivity } from './privacy.ts'
+import { captureError } from './reports.ts'
 export type { Sensitivity }
 
 export const RELAY_URL = 'https://minis-coach-ai.minis-coach-relay.workers.dev/chat'
@@ -250,6 +251,7 @@ export async function chat(text: string): Promise<Sensitivity> {
       if (!m.tool_calls.some((c) => c.function.name === 'get_day') && receipt.length) break
     }
   } catch (e) {
+    captureError(e, 'ai')
     reply = (e as Error).message
   }
   const name = s.name || ''

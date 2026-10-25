@@ -4,13 +4,13 @@ import { Check, ChevronLeft, ChevronRight, CloudUpload, Download } from 'lucide-
 import { db, saveSettings, DEMO, ACCENTS, type Accent, type Settings } from '../lib/db.ts'
 import { backup, prepareBackup, restore } from '../lib/backup.ts'
 import { targetsFor } from '../lib/calc.ts'
-import { signIn, logOut, pullFromCloud, backupNow, setFlag, type SyncState, type Flags } from '../lib/syncCore.ts'
+import { signIn, logOut, pullFromCloud, backupNow, setFlag, sendFeedback, type SyncState, type Flags } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
 import { Sheet, Seg, GoogleButton, toast } from './ui.tsx'
 import { ProgramPicker } from './ProgramPicker.tsx'
 
-type Page = 'root' | 'goals' | 'body' | 'training' | 'ai' | 'look' | 'data' | 'about' | 'dev'
-type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings]
+type Page = 'root' | 'goals' | 'body' | 'training' | 'ai' | 'look' | 'data' | 'about' | 'dev' | 'feedback'
+type NumKey = { [K in keyof Settings]-?: Settings[K] extends number ? K : never }[keyof Settings]
 
 const SWATCH: Record<Accent, string> = {
   blue: '#0a84ff', green: '#30d158', purple: '#bf5af2', pink: '#ff375f', orange: '#ff9f0a', teal: '#40c8e0', red: '#ff453a', graphite: '#8e8e93',
@@ -21,13 +21,14 @@ export function ProfileSheet({ s, sync, features, onClose }: { s: Settings; sync
   const [page, setPage] = useState<Page>('root')
   const titles: Record<Page, string> = {
     root: L('البروفايل', 'Profile'), goals: L('أهدافي', 'My targets'), body: L('جسمي', 'My body'), training: L('التمرين', 'Training'),
-    ai: L('الكوتش والـ AI', 'Coach & AI'), look: L('المظهر', 'Appearance'), data: L('بياناتي', 'My data'), about: L('عن التطبيق', 'About'), dev: L('المطور', 'Developer'),
+    ai: L('الكوتش والـ AI', 'Coach & AI'), look: L('المظهر', 'Appearance'), data: L('بياناتي', 'My data'), about: L('عن التطبيق', 'About'), dev: L('المطور', 'Developer'), feedback: L('رأيك يهمنا', 'Feedback'),
   }
   const back = page === 'root' ? undefined : () => setPage('root')
   return (
     <Sheet title={titles[page]} onClose={onClose} onBack={back}>
       <div key={page} className="fade-enter">
-        {page === 'root' && <Root s={s} sync={sync} admin={features.admin} go={setPage} />}
+        {page === 'root' && <Root s={s} sync={sync} admin={features.admin} feedbackAllowed={features.feedback} go={setPage} />}
+        {page === 'feedback' && <FeedbackPage done={() => setPage('root')} />}
         {page === 'goals' && <Goals s={s} done={() => setPage('root')} />}
         {page === 'body' && <Body s={s} done={() => setPage('root')} />}
         {page === 'training' && <ProgramPicker s={s} />}
@@ -41,7 +42,7 @@ export function ProfileSheet({ s, sync, features, onClose }: { s: Settings; sync
   )
 }
 
-function Root({ s, sync, admin, go }: { s: Settings; sync: SyncState; admin: boolean; go: (p: Page) => void }) {
+function Root({ s, sync, admin, feedbackAllowed, go }: { s: Settings; sync: SyncState; admin: boolean; feedbackAllowed: boolean; go: (p: Page) => void }) {
   const u = sync.user
   return (
     <>
@@ -68,6 +69,7 @@ function Root({ s, sync, admin, go }: { s: Settings; sync: SyncState; admin: boo
         <Row icon="☁️" label={L('بياناتي', 'My data')} onClick={() => go('data')} />
       </Rows>
       <Rows>
+        {feedbackAllowed && <Row icon="💬" label={L('رأيك يهمنا', 'Send feedback')} onClick={() => go('feedback')} />}
         <Row icon="ℹ️" label={L('عن التطبيق', 'About')} value={`v${__APP_VERSION__}`} onClick={() => go('about')} />
         {admin && <Row icon="🧪" label={L('المطور', 'Developer')} onClick={() => go('dev')} />}
       </Rows>
@@ -183,6 +185,71 @@ function AiPage({ s, available, signedIn }: { s: Settings; available: boolean; s
   )
 }
 
+function FeedbackPage({ done }: { done: () => void }) {
+  const [type, setType] = useState<'bug' | 'idea' | 'other'>('bug')
+  const [text, setText] = useState('')
+  const [doing, setDoing] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const submit = async () => {
+    if (!text.trim()) {
+      toast(L('اكتب ملاحظتك الأول', 'Please write your feedback first'))
+      return
+    }
+    setSending(true)
+    try {
+      await sendFeedback({ type, text: text.trim(), doing: doing.trim() || undefined })
+      toast(L('شكراً! ملاحظتك وصلت ❤️', 'Thanks! Your feedback was received ❤️'))
+      done()
+    } catch (e) {
+      toast(`⚠️ ${(e as Error).message}`)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="label">{L('النوع', 'Type')}</p>
+      <Seg
+        value={type}
+        onChange={(v) => setType(v as 'bug' | 'idea' | 'other')}
+        options={[
+          ['bug', L('🐞 مشكلة', '🐞 Bug')],
+          ['idea', L('💡 فكرة', '💡 Idea')],
+          ['other', L('💬 حاجة تانية', '💬 Other')],
+        ]}
+      />
+      <label className="block">
+        <span className="label">{L('الملاحظة', 'Feedback')}</span>
+        <textarea
+          rows={4}
+          className="field mt-1 resize-none"
+          placeholder={L('اكتب اللي فبالك بالتفصيل…', 'Write your thoughts in detail…')}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </label>
+      <label className="block">
+        <span className="label">{L('اللي كنت بتعمله (اختياري)', 'What you were doing (optional)')}</span>
+        <input
+          className="field mt-1"
+          placeholder={L('مثلاً: بسجل فطار، بفتح تمرين…', 'e.g. logging breakfast, opening a workout…')}
+          value={doing}
+          onChange={(e) => setDoing(e.target.value)}
+        />
+      </label>
+      <button
+        disabled={sending}
+        className="press mt-3 w-full rounded-2xl bg-accent py-3 font-semibold text-white disabled:opacity-50"
+        onClick={submit}
+      >
+        {sending ? L('بيتبعت…', 'Sending…') : L('إرسال', 'Send')}
+      </button>
+    </div>
+  )
+}
+
 function Look({ s }: { s: Settings }) {
   const switchLang = (l: 'ar' | 'en') => {
     if (l === lang) return
@@ -261,6 +328,41 @@ function About() {
 
 function Dev() {
   const [flags, setFlags] = useState<Flags | null>(null)
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
+  const [feedbackSummary, setFeedbackSummary] = useState<{ summary: string; taskPrompt: string } | null>(null)
+  const [feedbackDocs, setFeedbackDocs] = useState<{ id: string }[]>([])
+
+  const loadFeedbackSummary = async () => {
+    setFeedbackLoading(true)
+    try {
+      const items = (await (await import('../lib/sync.ts')).getFeedback()) as ({ id: string } & Record<string, unknown>)[]
+      setFeedbackDocs(items)
+      if (!items.length) {
+        toast(L('مفيش ملاحظات جديدة', 'No new feedback'))
+        setFeedbackSummary(null)
+        return
+      }
+      const res = await (await import('../lib/sync.ts')).summarizeFeedback(items)
+      setFeedbackSummary(res)
+    } catch (e) {
+      toast(`⚠️ ${(e as Error).message}`)
+    } finally {
+      setFeedbackLoading(false)
+    }
+  }
+
+  const markFeedbackDone = async () => {
+    if (!feedbackDocs.length) return
+    if (!confirm(L('مسح كل الملاحظات اللي اتلخصت دي؟', 'Delete all these summarized feedback items?'))) return
+    try {
+      await (await import('../lib/sync.ts')).clearFeedback(feedbackDocs.map((d) => d.id))
+      toast(L('✅ اتمسحت', '✅ Deleted'))
+      setFeedbackSummary(null)
+      setFeedbackDocs([])
+    } catch (e) {
+      toast(`⚠️ ${(e as Error).message}`)
+    }
+  }
   useEffect(() => {
     let off: (() => void) | undefined
     import('../lib/sync.ts').then((m) => { off = m.watchFlags(setFlags) })
@@ -285,6 +387,53 @@ function Dev() {
       <p className="label mt-3">{L('نشر للكل', 'Publish to everyone')}</p>
       <Toggle label={L('✨ مساعد AI', '✨ AI assistant')} on={!!flags?.ai} disabled={!flags} onChange={(on) => flip('ai', on)}
         sub={L('لما تفتحه، أخواتك يشوفوه فوراً من غير تحديث', 'When on, everyone gets it instantly — no update needed')} />
+
+      <Toggle label={L('💬 الملاحظات والشكاوى', '💬 Feedback & error reports')} on={!!flags?.feedback} disabled={!flags} onChange={(on) => flip('feedback', on)}
+        sub={L('زرار رأيك يهمنا + إرسال تقارير الأخطاء للمطور', 'Send feedback button + automatic error reporting')} />
+      <Toggle label={L('📚 مكتبة التمارين', '📚 Exercise library')} on={!!flags?.library} disabled={!flags} onChange={(on) => flip('library', on)}
+        sub={L('مكتبة 870+ تمرين بالأنيميشن والأنشطة الخارجية', '870+ exercise library with animations and sports')} />
+      <Toggle label={L('📋 الروتينات والجدول', '📋 Routines & schedule')} on={!!flags?.routines} disabled={!flags} onChange={(on) => flip('routines', on)}
+        sub={L('باقات تمارين مخصصة والجدولة الأسبوعية', 'Custom workout routines and weekly schedule')} />
+      <Toggle label={L('🧠 كوتش ذكي v2', '🧠 Smart Coach v2')} on={!!flags?.aiV2} disabled={!flags} onChange={(on) => flip('aiV2', on)}
+        sub={L('أدوات جديدة للكوتش: حساب وجبات، تمارين، روتينات', 'New tools: portion planning, routines, exercise search')} />
+
+      <p className="label mt-3">{L('📊 ملخص الملاحظات', '📊 Feedback summary')}</p>
+      <button
+        disabled={feedbackLoading}
+        className="press rounded-2xl bg-fill py-2.5 text-[14px] text-accent disabled:opacity-50"
+        onClick={loadFeedbackSummary}
+      >
+        {feedbackLoading ? L('⏳ جاري التلخيص بواسطة AI…', '⏳ Summarizing with AI…') : L('📊 هات ولخص كل الملاحظات والأخطاء', 'Fetch & summarize all feedback')}
+      </button>
+
+      {feedbackSummary && (
+        <div className="flex flex-col gap-3 rounded-2xl bg-fill p-3.5 text-[13px] leading-relaxed">
+          <div className="max-h-60 overflow-y-auto whitespace-pre-wrap font-sans text-ink">
+            {feedbackSummary.summary}
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="press flex-1 rounded-xl border border-hair bg-surface py-2 font-medium text-accent"
+              onClick={() => navigator.clipboard.writeText(feedbackSummary.summary).then(() => toast(L('📋 اتنسخ الملخص', '📋 Summary copied')))}
+            >
+              {L('نسخ الملخص', 'Copy summary')}
+            </button>
+            <button
+              className="press flex-1 rounded-xl border border-hair bg-surface py-2 font-medium text-accent"
+              onClick={() => navigator.clipboard.writeText(feedbackSummary.taskPrompt).then(() => toast(L('📋 اتنسخ برومبت المهمة', '📋 Task prompt copied')))}
+            >
+              {L('نسخ كبرومبت مهمة', 'Copy task prompt')}
+            </button>
+          </div>
+          <button
+            className="press rounded-xl bg-red/15 py-2 font-medium text-red"
+            onClick={markFeedbackDone}
+          >
+            {L('تحديد كمكتمل ومسح من السحابة', 'Mark done & delete from cloud')}
+          </button>
+        </div>
+      )}
+
     </div>
   )
 }

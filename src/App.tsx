@@ -13,6 +13,7 @@ const TodayTab = memo(Today)
 const AssistantSheet = lazy(() => import('./components/Coach.tsx').then((m) => ({ default: m.AssistantSheet })))
 import { Onboarding } from './components/Onboarding.tsx'
 import { ProfileSheet } from './components/ProfileSheet.tsx'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { Toaster, UpdatePrompt, toast } from './components/ui.tsx'
 
 const TABS = [
@@ -112,11 +113,11 @@ export default function App() {
       )}
 
       <main>
-        <div hidden={tab !== 'today'} className="fade-enter"><TodayTab s={s} theme={theme} signedIn={!!sync.user} onSettings={openSettings} onFood={openFood} /></div>
+        <div hidden={tab !== 'today'} className="fade-enter"><ErrorBoundary tab="today"><TodayTab s={s} theme={theme} signedIn={!!sync.user} onSettings={openSettings} onFood={openFood} /></ErrorBoundary></div>
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
-          {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><Food s={s} /></div>}
-          {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><Exercise s={s} /></div>}
-          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><Coach visible={tab === 'coach'} aiOn={aiOn} /></div>}
+          {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><ErrorBoundary tab="food"><Food s={s} /></ErrorBoundary></div>}
+          {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><ErrorBoundary tab="exercise"><Exercise s={s} /></ErrorBoundary></div>}
+          {seen.has('coach') && <div hidden={tab !== 'coach'} className="fade-enter"><ErrorBoundary tab="coach"><Coach visible={tab === 'coach'} aiOn={aiOn} /></ErrorBoundary></div>}
         </Suspense>
       </main>
 

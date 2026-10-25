@@ -5,6 +5,14 @@ import './index.css'
 import App from './App.tsx'
 import { installSyncHooks } from './lib/syncCore.ts'
 import { DEMO } from './lib/db.ts'
+import { captureError } from './lib/reports.ts'
+
+window.addEventListener('error', (e) => {
+  captureError(e.error ?? e.message, 'window')
+})
+window.addEventListener('unhandledrejection', (e) => {
+  captureError(e.reason, 'promise')
+})
 
 navigator.storage?.persist?.()
 // lets :active fire instantly on Android touch
