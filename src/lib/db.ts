@@ -158,6 +158,8 @@ db.version(5).stores({
   feedbackQueue: '++id',
   routines: 'id',
 })
+// reports are sorted by lastAt (recent reports in feedback, the 50-report cap)
+db.version(6).stores({ reports: 'key, lastAt' })
 
 export const today = () => new Date().toLocaleDateString('en-CA')
 
