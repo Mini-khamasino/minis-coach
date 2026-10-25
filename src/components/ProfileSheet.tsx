@@ -321,6 +321,9 @@ function About() {
       <p className="text-[20px] font-semibold">Mini's Coach</p>
       <p className="text-[13px] text-ink-2">v{__APP_VERSION__} · {new Date(__BUILD_TIME__).toLocaleString(locale, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</p>
       <a className="press rounded-2xl bg-fill py-3 text-accent" href="/privacy.html" target="_blank" rel="noreferrer">{L('سياسة الخصوصية', 'Privacy policy')}</a>
+      <div className="rounded-2xl bg-fill p-3 text-[12px] leading-relaxed text-ink-2">
+        {L('تمارين وصور الأداء مقدمة من مشروع free-exercise-db تحت رخصة النطاق العام (Unlicense).', 'Exercise data and demonstration images provided by free-exercise-db under the public domain (Unlicense).')}
+      </div>
       <p className="text-[12px] text-ink-3">Mini Apps</p>
     </div>
   )

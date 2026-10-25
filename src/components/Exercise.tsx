@@ -8,6 +8,10 @@ import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from 
 import { L } from '../lib/i18n.ts'
 import { Sheet, Seg, toast, tick } from './ui.tsx'
 import { ProgramPicker } from './ProgramPicker.tsx'
+import { useSync, useFeatures } from '../lib/syncCore.ts'
+import { MAP_53_TO_DATASET } from '../lib/library.ts'
+import { ExerciseLibrary } from './ExerciseLibrary.tsx'
+import { ExerciseAnimation } from './ExerciseAnimation.tsx'
 
 const repsMin = (r: string) => parseInt(r) || 8
 
@@ -19,7 +23,9 @@ export function Exercise({ s }: { s: Settings }) {
   const day = program.days[dayIdx]
   const now = Date.now()
   const doneToday = workouts.some((w) => w.endedAt && w.date === today())
-  const [sheet, setSheet] = useState<'program' | 'log' | null>(null)
+  const sync = useSync()
+  const features = useFeatures(sync.user)
+  const [sheet, setSheet] = useState<'program' | 'log' | 'library' | null>(null)
   const [muscle, setMuscle] = useState<Muscle | null>(null)
 
   const targets = useMemo(() => [...new Set(day.slots.flatMap(([id]) => EXERCISES[id]?.muscles.slice(0, 2) ?? []))], [day])
@@ -43,6 +49,19 @@ export function Exercise({ s }: { s: Settings }) {
   return (
     <div className="flex flex-col gap-3">
       <BodyCard targets={doneToday ? [] : targets} recovering={rec} week={week} onMuscle={setMuscle} />
+
+      {features.library && (
+        <button
+          className="press card flex items-center justify-between p-3.5"
+          onClick={() => setSheet('library')}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-[20px]">📚</span>
+            <span className="font-semibold text-[15px]">{L('مكتبة التمارين والرياضات', 'Exercise & Sport Library')}</span>
+          </div>
+          <span className="text-[13px] text-accent font-medium">870+ {L('تمرين', 'exercises')} ▾</span>
+        </button>
+      )}
 
       <section className="card">
         <div className="mb-1 flex items-center justify-between">
@@ -75,8 +94,9 @@ export function Exercise({ s }: { s: Settings }) {
       )}
 
       {sheet === 'program' && <ProgramSheet s={s} current={program} onClose={() => setSheet(null)} />}
+      {sheet === 'library' && <ExerciseLibrary onClose={() => setSheet(null)} />}
       {sheet === 'log' && active && <Logger w={active} all={workouts} onClose={() => setSheet(null)} restSec={s.restSec} />}
-      {muscle && <MuscleSheet muscle={muscle} place={s.place} onClose={() => setMuscle(null)} />}
+      {muscle && (features.library ? <ExerciseLibrary initialMuscle={muscle} onClose={() => setMuscle(null)} /> : <MuscleSheet muscle={muscle} place={s.place} onClose={() => setMuscle(null)} />)}
     </div>
   )
 }
@@ -204,7 +224,22 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
               <button className="press p-1 text-ink-3" onClick={() => setTip(tip === e.exId ? null : e.exId)} aria-label={L('نصيحة', 'Tip')}><Info size={17} /></button>
               <button className="press p-1 text-ink-3" onClick={() => save(w.exercises.filter((_, i) => i !== ei))} aria-label={L('شيل التمرين', 'Remove exercise')}><X size={17} /></button>
             </div>
-            {tip === e.exId && <p className="mb-2 text-[13px] text-ink-2">💡 {L(EXERCISES[e.exId]?.tipAr ?? '', EXERCISES[e.exId]?.tipEn ?? '')}</p>}
+            {tip === e.exId && (
+              <div className="mb-3 flex flex-col gap-2 rounded-xl bg-surface p-2.5">
+                {(() => {
+                  const dsId = MAP_53_TO_DATASET[e.exId] || (e.exId.startsWith('lib:') ? e.exId.slice(4) : null)
+                  const imgs = dsId ? [`${dsId}/0.jpg`, `${dsId}/1.jpg`] : []
+                  return imgs.length > 0 ? (
+                    <div className="h-44 w-full">
+                      <ExerciseAnimation images={imgs} name={exName(e.exId)} className="size-full" />
+                    </div>
+                  ) : null
+                })()}
+                {EXERCISES[e.exId]?.tipAr && (
+                  <p className="text-[13px] text-ink-2">💡 {L(EXERCISES[e.exId].tipAr, EXERCISES[e.exId].tipEn)}</p>
+                )}
+              </div>
+            )}
             <div className="mb-1 grid grid-cols-[28px_1fr_1fr_44px] gap-2 text-center text-[11px] text-ink-3">
               <span>#</span><span>{L('كجم', 'kg')}</span><span>{L('عدات', 'reps')}</span><span />
             </div>

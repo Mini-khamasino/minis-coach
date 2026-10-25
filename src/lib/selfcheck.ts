@@ -8,6 +8,7 @@ import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from 
 import { generate, advice, answer } from './coach.ts'
 import { sensitivity } from './privacy.ts'
 import { reportKey } from './reports.ts'
+import { mapDatasetMuscles, classifyPlace, activityKcal, searchLibrary, type LibraryExercise } from './library.ts'
 import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
@@ -141,6 +142,32 @@ assert.equal(sensitivity('مش عايز أعيش وعايز اموت'), 'crisis'
 assert.equal(reportKey('network timeout', 'Error: network timeout\n    at fetch (app.js:10:5)'), 'network timeout|at fetch (app.js:10:5)')
 assert.equal(reportKey('simple error'), 'simple error')
 assert.equal(reportKey('same err', 'at line1\nat line2'), reportKey('same err', 'at line1\nat line3'))
+
+// ── exercise library ──
+assert.deepEqual(mapDatasetMuscles(['chest', 'triceps']), ['chest', 'triceps'])
+assert.deepEqual(mapDatasetMuscles(['abdominals', 'glutes']), ['abs', 'gluteal'])
+assert.deepEqual(mapDatasetMuscles(['middle back', 'lats']), ['upper-back'])
+
+assert.equal(classifyPlace('barbell'), 'gym')
+assert.equal(classifyPlace('cable'), 'gym')
+assert.equal(classifyPlace('body only'), 'home')
+assert.equal(classifyPlace('body only', 'cardio'), 'outside')
+
+assert.equal(activityKcal(8, 75, 60), 600)
+assert.equal(activityKcal(8, 75, 30), 300)
+assert.equal(activityKcal(0, 75, 60), 0)
+
+const sampleExercises: LibraryExercise[] = [
+  { id: 'Barbell_Bench_Press', name: 'Barbell Bench Press', arName: 'بنش برس بار', category: 'strength', equipment: 'barbell', level: 'intermediate', primaryMuscles: ['chest'], secondaryMuscles: ['triceps'], instructions: [], images: [], place: 'gym', bodyMuscles: ['chest', 'triceps'] },
+  { id: 'Pushups', name: 'Pushups', arName: 'ضغط', category: 'strength', equipment: 'body only', level: 'beginner', primaryMuscles: ['chest'], secondaryMuscles: ['triceps'], instructions: [], images: [], place: 'home', bodyMuscles: ['chest', 'triceps'] },
+  { id: 'Running', name: 'Running', category: 'cardio', equipment: null, level: 'beginner', primaryMuscles: ['quadriceps'], secondaryMuscles: ['calves'], instructions: [], images: [], place: 'outside', bodyMuscles: ['quadriceps', 'calves'] },
+]
+
+assert.equal(searchLibrary('bench', sampleExercises).length, 1)
+assert.equal(searchLibrary('بنش', sampleExercises).length, 1)
+assert.equal(searchLibrary('ضغط', sampleExercises)[0].id, 'Pushups')
+assert.equal(searchLibrary('', sampleExercises, { place: 'gym' }).length, 1)
+assert.equal(searchLibrary('', sampleExercises, { muscle: 'chest' }).length, 2)
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)
