@@ -89,6 +89,7 @@ export default function App() {
   const go = useCallback((t: Tab) => { setTab(t); setSeen((x) => new Set(x).add(t)); scrollTo({ top: 0 }) }, [])
   const openSettings = useCallback(() => setSettings(true), [])
   const openFood = useCallback(() => go('food'), [go])
+  const openTrain = useCallback(() => go('exercise'), [go])
 
   if (!boot) return null
   // A backup restore or cloud download counts as onboarded; so does an older install that already has food logged.
@@ -113,7 +114,7 @@ export default function App() {
       )}
 
       <main>
-        <div hidden={tab !== 'today'} className="fade-enter"><ErrorBoundary tab="today"><TodayTab s={s} theme={theme} signedIn={!!sync.user} onSettings={openSettings} onFood={openFood} /></ErrorBoundary></div>
+        <div hidden={tab !== 'today'} className="fade-enter"><ErrorBoundary tab="today"><TodayTab s={s} theme={theme} signedIn={!!sync.user} onSettings={openSettings} onFood={openFood} onTrain={openTrain} /></ErrorBoundary></div>
         <Suspense fallback={<div className="card h-40 animate-pulse" />}>
           {seen.has('food') && <div hidden={tab !== 'food'} className="fade-enter"><ErrorBoundary tab="food"><Food s={s} /></ErrorBoundary></div>}
           {seen.has('exercise') && <div hidden={tab !== 'exercise'} className="fade-enter"><ErrorBoundary tab="exercise"><Exercise s={s} /></ErrorBoundary></div>}

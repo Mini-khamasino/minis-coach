@@ -2,18 +2,109 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter'
 import { Check, Plus, RotateCcw, Timer, Trophy, X, Info } from 'lucide-react'
-import { db, today, type Settings, type Workout } from '../lib/db.ts'
+import { db, today, type Settings, type Workout, type Routine } from '../lib/db.ts'
 import { EXERCISES, PROGRAMS, exName, muscleName, suggestProgram, workoutKcal, e1rm, type Program } from '../lib/exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from '../lib/training.ts'
 import { L } from '../lib/i18n.ts'
 import { Sheet, Seg, toast, tick } from './ui.tsx'
 import { ProgramPicker } from './ProgramPicker.tsx'
 import { useSync, useFeatures } from '../lib/syncCore.ts'
-import { MAP_53_TO_DATASET } from '../lib/library.ts'
+import { MAP_53_TO_DATASET, ACTIVITIES, activityKcal, DATASET_AR_NAMES } from '../lib/library.ts'
+import { RoutinesSheet } from './RoutinesSheet.tsx'
+import { routineToWorkout } from '../lib/routines.ts'
 import { ExerciseLibrary } from './ExerciseLibrary.tsx'
 import { ExerciseAnimation } from './ExerciseAnimation.tsx'
 
 const repsMin = (r: string) => parseInt(r) || 8
+
+const DAYS_NAMES_AR = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
+const DAYS_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+export const formatExName = (id: string) => {
+  if (EXERCISES[id]) return L(EXERCISES[id].ar, EXERCISES[id].en)
+  if (id.startsWith('activity:')) {
+    const act = ACTIVITIES.find((a) => a.id === id.slice(9))
+    return act ? L(act.ar, act.en) : id.slice(9).replaceAll('_', ' ')
+  }
+  if (id.startsWith('lib:')) {
+    const libId = id.slice(4)
+    return DATASET_AR_NAMES[libId] ? L(DATASET_AR_NAMES[libId], libId.replaceAll('_', ' ')) : libId.replaceAll('_', ' ')
+  }
+  return id
+}
+
+function WeekStrip({
+  routines,
+  workouts,
+  nowMs,
+}: {
+  routines: Routine[]
+  workouts: Workout[]
+  nowMs: number
+}) {
+  const now = new Date(nowMs)
+  const currentDow = now.getDay()
+  const sundayMs = nowMs - currentDow * 86400_000
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const dMs = sundayMs + i * 86400_000
+    const dDate = new Date(dMs)
+    const dateStr = dDate.toLocaleDateString('en-CA')
+    const dayNum = dDate.getDate()
+    const isToday = i === currentDow
+
+    const done = workouts.some((w) => w.date === dateStr && w.endedAt)
+    const isScheduled = routines.some(
+      (r) => r.schedule.mode === 'days' && r.schedule.days.includes(i),
+    )
+
+    return {
+      dow: i,
+      name: L(DAYS_NAMES_AR[i], DAYS_NAMES_EN[i]),
+      dayNum,
+      isToday,
+      done,
+      isScheduled,
+    }
+  })
+
+  return (
+    <div className="card p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="label">{L('جدول الأسبوع', 'Weekly Schedule')}</span>
+        <span className="text-[12px] text-ink-3">
+          {days.filter((d) => d.done).length} {L('تمارين مخلصة', 'completed')}
+        </span>
+      </div>
+      <div className="flex justify-between gap-1">
+        {days.map((d) => (
+          <div
+            key={d.dow}
+            className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-2 ${
+              d.isToday ? 'bg-accent/15 ring-1 ring-accent' : 'bg-fill'
+            }`}
+          >
+            <span className="text-[11px] font-medium text-ink-3">{d.name}</span>
+            <span className={`num text-[13px] font-bold ${d.isToday ? 'text-accent' : 'text-ink'}`}>
+              {d.dayNum}
+            </span>
+            <div className="mt-0.5 size-4 grid place-items-center">
+              {d.done ? (
+                <div className="size-3.5 rounded-full bg-green grid place-items-center text-white">
+                  <Check size={10} strokeWidth={3} />
+                </div>
+              ) : d.isScheduled ? (
+                <div className="size-2 rounded-full bg-accent" />
+              ) : (
+                <div className="size-1 rounded-full bg-hair" />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function Exercise({ s }: { s: Settings }) {
   const workouts = useLiveQuery(() => db.workouts.toArray().then((ws) => ws.sort((a, b) => a.startedAt - b.startedAt))) ?? []
@@ -25,7 +116,8 @@ export function Exercise({ s }: { s: Settings }) {
   const doneToday = workouts.some((w) => w.endedAt && w.date === today())
   const sync = useSync()
   const features = useFeatures(sync.user)
-  const [sheet, setSheet] = useState<'program' | 'log' | 'library' | null>(null)
+  const routines = useLiveQuery(() => db.routines.toArray()) ?? []
+  const [sheet, setSheet] = useState<'program' | 'log' | 'library' | 'routines' | null>(null)
   const [muscle, setMuscle] = useState<Muscle | null>(null)
 
   const targets = useMemo(() => [...new Set(day.slots.flatMap(([id]) => EXERCISES[id]?.muscles.slice(0, 2) ?? []))], [day])
@@ -63,6 +155,23 @@ export function Exercise({ s }: { s: Settings }) {
         </button>
       )}
 
+      {features.routines && (
+        <WeekStrip routines={routines} workouts={workouts} nowMs={now} />
+      )}
+
+      {features.routines && (
+        <button
+          className="press card flex items-center justify-between p-3.5"
+          onClick={() => setSheet('routines')}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-[20px]">📋</span>
+            <span className="font-semibold text-[15px]">{L('روتيناتي الخاصة', 'My Custom Routines')}</span>
+          </div>
+          <span className="text-[13px] text-accent font-medium">{routines.length} {L('روتين', 'routines')} ▾</span>
+        </button>
+      )}
+
       <section className="card">
         <div className="mb-1 flex items-center justify-between">
           <p className="label">{doneToday ? L('خلصت تمرين النهارده 💪', 'Done for today 💪') : L('التمرين الجاي', 'Next workout')}</p>
@@ -95,7 +204,17 @@ export function Exercise({ s }: { s: Settings }) {
 
       {sheet === 'program' && <ProgramSheet s={s} current={program} onClose={() => setSheet(null)} />}
       {sheet === 'library' && <ExerciseLibrary onClose={() => setSheet(null)} />}
-      {sheet === 'log' && active && <Logger w={active} all={workouts} onClose={() => setSheet(null)} restSec={s.restSec} />}
+      {sheet === 'routines' && (
+        <RoutinesSheet
+          onClose={() => setSheet(null)}
+          onStartRoutine={async (routine) => {
+            tick()
+            await db.workouts.add(routineToWorkout(routine))
+            setSheet('log')
+          }}
+        />
+      )}
+      {sheet === 'log' && active && <Logger w={active} all={workouts} onClose={() => setSheet(null)} restSec={s.restSec} libraryAllowed={features.library} />}
       {muscle && (features.library ? <ExerciseLibrary initialMuscle={muscle} onClose={() => setMuscle(null)} /> : <MuscleSheet muscle={muscle} place={s.place} onClose={() => setMuscle(null)} />)}
     </div>
   )
@@ -174,7 +293,7 @@ function beep() {
 }
 
 /** Live workout: sets autosave on every tap, so closing the app never loses progress. */
-function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; restSec: number; onClose: () => void }) {
+function Logger({ w, all, restSec, onClose, libraryAllowed }: { w: Workout; all: Workout[]; restSec: number; onClose: () => void; libraryAllowed?: boolean }) {
   const [restEnd, setRestEnd] = useState<number | null>(null)
   const [, force] = useState(0)
   const [adding, setAdding] = useState(false)
@@ -207,8 +326,16 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
     await db.workouts.update(w.id!, { endedAt: Date.now() })
     const volume = Math.round(sets.reduce((a, s) => a + s.kg * s.reps, 0))
     const newPrs = sets.filter((s) => s.kg > 0 && e1rm(s.kg, s.reps) > (prsBefore.get(s.exId)?.e1rm ?? Infinity) && prsBefore.has(s.exId))
-    toast(L(`💪 ${sets.length} سيت · ${volume} كجم حجم · ~${workoutKcal(minutes, bodyKg)} سعر${newPrs.length ? ` · 🏆 ${newPrs.length} رقم قياسي` : ''}`,
-      `💪 ${sets.length} sets · ${volume} kg volume · ~${workoutKcal(minutes, bodyKg)} kcal${newPrs.length ? ` · 🏆 ${newPrs.length} PR` : ''}`))
+    const actCalories = w.exercises
+      .filter((e) => e.exId.startsWith('activity:'))
+      .reduce((acc, e) => {
+        const act = ACTIVITIES.find((a) => `activity:${a.id}` === e.exId)
+        const mins = e.sets.filter((s) => s.done).reduce((m, s) => m + (s.seconds ? Math.round(s.seconds / 60) : (s.reps || 30)), 0)
+        return acc + activityKcal(act?.met || 6, bodyKg, mins)
+      }, 0)
+    const totalKcal = Math.round(workoutKcal(minutes, bodyKg) + actCalories)
+    toast(L(`💪 ${sets.length} سيت · ${volume} كجم حجم · ~${totalKcal} سعر${newPrs.length ? ` · 🏆 ${newPrs.length} رقم قياسي` : ''}`,
+      `💪 ${sets.length} sets · ${volume} kg volume · ~${totalKcal} kcal${newPrs.length ? ` · 🏆 ${newPrs.length} PR` : ''}`))
     onClose()
   }
 
@@ -220,7 +347,7 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
         return (
           <section key={ei} className="mb-4 rounded-2xl bg-fill p-3">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="flex-1 font-semibold">{exName(e.exId)}</h3>
+              <h3 className="flex-1 font-semibold">{formatExName(e.exId)}</h3>
               <button className="press p-1 text-ink-3" onClick={() => setTip(tip === e.exId ? null : e.exId)} aria-label={L('نصيحة', 'Tip')}><Info size={17} /></button>
               <button className="press p-1 text-ink-3" onClick={() => save(w.exercises.filter((_, i) => i !== ei))} aria-label={L('شيل التمرين', 'Remove exercise')}><X size={17} /></button>
             </div>
@@ -231,7 +358,7 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
                   const imgs = dsId ? [`${dsId}/0.jpg`, `${dsId}/1.jpg`] : []
                   return imgs.length > 0 ? (
                     <div className="h-44 w-full">
-                      <ExerciseAnimation images={imgs} name={exName(e.exId)} className="size-full" />
+                      <ExerciseAnimation images={imgs} name={formatExName(e.exId)} className="size-full" />
                     </div>
                   ) : null
                 })()}
@@ -240,21 +367,115 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
                 )}
               </div>
             )}
-            <div className="mb-1 grid grid-cols-[28px_1fr_1fr_44px] gap-2 text-center text-[11px] text-ink-3">
-              <span>#</span><span>{L('كجم', 'kg')}</span><span>{L('عدات', 'reps')}</span><span />
-            </div>
-            {e.sets.map((st, si) => (
-              <div key={si} className={`mb-1.5 grid grid-cols-[28px_1fr_1fr_44px] items-center gap-2 ${st.done ? 'opacity-60' : ''}`}>
-                <span className="num text-center text-ink-2">{si + 1}</span>
-                <input className="field num !py-2 text-center" inputMode="decimal" value={st.kg || ''} placeholder={last[si] ? String(last[si].kg) : '0'}
-                  onChange={(ev) => setSet(ei, si, { kg: Number(ev.target.value) || 0 })} aria-label={L('كجم', 'kg')} />
-                <input className="field num !py-2 text-center" inputMode="numeric" value={st.reps || ''} placeholder={last[si] ? String(last[si].reps) : ''}
-                  onChange={(ev) => setSet(ei, si, { reps: Number(ev.target.value) || 0 })} aria-label={L('عدات', 'reps')} />
-                <button className={`press grid h-10 place-items-center rounded-xl ${st.done ? 'bg-green text-white' : 'bg-canvas/40 text-ink-3'}`} onClick={() => toggle(ei, si)} aria-pressed={st.done} aria-label={L('خلصت السيت', 'Set done')}>
-                  <Check size={20} strokeWidth={3} />
-                </button>
-              </div>
-            ))}
+            {(() => {
+              const isActivity = e.exId.startsWith('activity:')
+              const actId = isActivity ? e.exId.slice(9) : null
+              const act = actId ? ACTIVITIES.find((a) => a.id === actId) : null
+              const isTimeOrDist = e.sets[0]?.seconds !== undefined || e.sets[0]?.meters !== undefined || isActivity
+
+              if (isActivity && act) {
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="mb-1 flex justify-between text-[11px] text-ink-3 px-1">
+                      <span>{L('المدة (دقيقة)', 'Duration (min)')}</span>
+                      <span>{L('حرق تقديري', 'Est. burn')}</span>
+                      <span />
+                    </div>
+                    {e.sets.map((st, si) => {
+                      const mins = st.seconds ? Math.round(st.seconds / 60) : (st.reps || 30)
+                      const kcal = activityKcal(act.met, bodyKg, mins)
+                      return (
+                        <div key={si} className={`flex items-center gap-2 ${st.done ? 'opacity-60' : ''}`}>
+                          <input
+                            className="field num !py-2 text-center flex-1"
+                            type="number"
+                            inputMode="numeric"
+                            value={mins || ''}
+                            placeholder="30"
+                            onChange={(ev) => setSet(ei, si, { seconds: (Number(ev.target.value) || 0) * 60, reps: Number(ev.target.value) || 0 })}
+                          />
+                          <span className="num font-semibold text-accent text-[13px] px-2 min-w-[70px] text-center">
+                            🔥 {kcal} {L('سعر', 'kcal')}
+                          </span>
+                          <button
+                            className={`press grid h-10 w-11 place-items-center rounded-xl shrink-0 ${st.done ? 'bg-green text-white' : 'bg-canvas/40 text-ink-3'}`}
+                            onClick={() => toggle(ei, si)}
+                            aria-pressed={st.done}
+                          >
+                            <Check size={20} strokeWidth={3} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+
+              if (isTimeOrDist) {
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="mb-1 grid grid-cols-[28px_1fr_1fr_44px] gap-2 text-center text-[11px] text-ink-3">
+                      <span>#</span>
+                      <span>{e.sets[0]?.meters !== undefined ? L('مسافة (متر)', 'Distance (m)') : L('وقت (ث)', 'Time (s)')}</span>
+                      <span>{L('كجم / راحة', 'kg / rest')}</span>
+                      <span />
+                    </div>
+                    {e.sets.map((st, si) => (
+                      <div key={si} className={`grid grid-cols-[28px_1fr_1fr_44px] items-center gap-2 ${st.done ? 'opacity-60' : ''}`}>
+                        <span className="num text-center text-ink-2">{si + 1}</span>
+                        <input
+                          className="field num !py-2 text-center"
+                          type="number"
+                          inputMode="numeric"
+                          value={st.meters !== undefined ? (st.meters || '') : (st.seconds || '')}
+                          placeholder="60"
+                          onChange={(ev) => {
+                            const val = Number(ev.target.value) || 0
+                            if (st.meters !== undefined) setSet(ei, si, { meters: val })
+                            else setSet(ei, si, { seconds: val })
+                          }}
+                        />
+                        <input
+                          className="field num !py-2 text-center"
+                          type="number"
+                          inputMode="decimal"
+                          value={st.kg || ''}
+                          placeholder="0"
+                          onChange={(ev) => setSet(ei, si, { kg: Number(ev.target.value) || 0 })}
+                        />
+                        <button
+                          className={`press grid h-10 place-items-center rounded-xl ${st.done ? 'bg-green text-white' : 'bg-canvas/40 text-ink-3'}`}
+                          onClick={() => toggle(ei, si)}
+                          aria-pressed={st.done}
+                        >
+                          <Check size={20} strokeWidth={3} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              }
+
+              return (
+                <div className="flex flex-col gap-1.5">
+                  <div className="mb-1 grid grid-cols-[28px_1fr_1fr_44px] gap-2 text-center text-[11px] text-ink-3">
+                    <span>#</span><span>{L('كجم', 'kg')}</span><span>{L('عدات', 'reps')}</span><span />
+                  </div>
+                  {e.sets.map((st, si) => (
+                    <div key={si} className={`mb-1.5 grid grid-cols-[28px_1fr_1fr_44px] items-center gap-2 ${st.done ? 'opacity-60' : ''}`}>
+                      <span className="num text-center text-ink-2">{si + 1}</span>
+                      <input className="field num !py-2 text-center" inputMode="decimal" value={st.kg || ''} placeholder={last[si] ? String(last[si].kg) : '0'}
+                        onChange={(ev) => setSet(ei, si, { kg: Number(ev.target.value) || 0 })} aria-label={L('كجم', 'kg')} />
+                      <input className="field num !py-2 text-center" inputMode="numeric" value={st.reps || ''} placeholder={last[si] ? String(last[si].reps) : ''}
+                        onChange={(ev) => setSet(ei, si, { reps: Number(ev.target.value) || 0 })} aria-label={L('عدات', 'reps')} />
+                      <button className={`press grid h-10 place-items-center rounded-xl ${st.done ? 'bg-green text-white' : 'bg-canvas/40 text-ink-3'}`} onClick={() => toggle(ei, si)} aria-pressed={st.done} aria-label={L('خلصت السيت', 'Set done')}>
+                        <Check size={20} strokeWidth={3} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
             <div className="flex items-center justify-between">
               <button className="press text-[13px] text-accent" onClick={() => save(w.exercises.map((x, i) => (i === ei ? { ...x, sets: [...x.sets, { ...(x.sets.at(-1) ?? { kg: 0, reps: 8 }), done: false }] } : x)))}>+ {L('سيت', 'Set')}</button>
               {last.length > 0 && <span className="text-[12px] text-ink-3">{L('آخر مرة', 'Last time')}: {last.map((x) => `${x.kg}×${x.reps}`).join(' · ')}</span>}
@@ -273,7 +494,20 @@ function Logger({ w, all, restSec, onClose }: { w: Workout; all: Workout[]; rest
           <button className="press rounded-xl bg-fill px-3 py-2 text-[14px]" onClick={() => setRestEnd(null)}>{L('تخطي', 'Skip')}</button>
         </div>
       )}
-      {adding && <AddExercise onPick={(exId) => save([...w.exercises, { exId, sets: [{ kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }] }])} onClose={() => setAdding(false)} />}
+      {adding && (
+        libraryAllowed ? (
+          <ExerciseLibrary
+            onClose={() => setAdding(false)}
+            onAddToRoutine={(item) => {
+              const exId = 'met' in item ? `activity:${item.id}` : `lib:${item.id}`
+              save([...w.exercises, { exId, sets: [{ kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }] }])
+              setAdding(false)
+            }}
+          />
+        ) : (
+          <AddExercise onPick={(exId) => save([...w.exercises, { exId, sets: [{ kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }, { kg: 0, reps: 10, done: false }] }])} onClose={() => setAdding(false)} />
+        )
+      )}
     </Sheet>
   )
 }

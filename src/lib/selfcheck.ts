@@ -9,6 +9,8 @@ import { generate, advice, answer } from './coach.ts'
 import { sensitivity } from './privacy.ts'
 import { reportKey } from './reports.ts'
 import { mapDatasetMuscles, classifyPlace, activityKcal, searchLibrary, type LibraryExercise } from './library.ts'
+import { nextSession, routineToWorkout, templateFromProgram } from './routines.ts'
+import type { Routine } from './db.ts'
 import { DEFAULTS } from './db.ts'
 
 // plain item: 200 g rice at 130/100 → 260
@@ -168,6 +170,38 @@ assert.equal(searchLibrary('بنش', sampleExercises).length, 1)
 assert.equal(searchLibrary('ضغط', sampleExercises)[0].id, 'Pushups')
 assert.equal(searchLibrary('', sampleExercises, { place: 'gym' }).length, 1)
 assert.equal(searchLibrary('', sampleExercises, { muscle: 'chest' }).length, 2)
+
+// ── routines & schedule ──
+const rot1: Routine = {
+  id: 'r1',
+  name: 'Upper A',
+  schedule: { mode: 'days', days: [1, 3, 5], time: '18:00' },
+  exercises: [
+    { ref: { kind: 'legacy', id: 'bench' }, type: 'reps', sets: 3, reps: 8, kg: 70, restSec: 90 },
+  ],
+  createdAt: 1000,
+  updatedAt: 1000,
+}
+
+const monday = new Date('2026-10-19T10:00:00').getTime()
+const sMonday = nextSession([rot1], [], monday)
+assert.equal(sMonday?.isToday, true)
+assert.equal(sMonday?.routine.id, 'r1')
+assert.equal(sMonday?.time, '18:00')
+
+const doneMonday = { date: '2026-10-19', startedAt: monday, endedAt: monday + 3600_000, programId: '', routineId: 'r1', dayIndex: 0, exercises: [] }
+const sNext = nextSession([rot1], [doneMonday], monday)
+assert.equal(sNext?.isToday, false)
+assert.equal(sNext?.date, '2026-10-21')
+
+const wkFromRoutine = routineToWorkout(rot1, '2026-10-19')
+assert.equal(wkFromRoutine.routineId, 'r1')
+assert.equal(wkFromRoutine.exercises[0].exId, 'bench')
+assert.equal(wkFromRoutine.exercises[0].sets.length, 3)
+
+const templates = templateFromProgram(PROGRAMS[0])
+assert.ok(templates.length > 0)
+assert.equal(templates[0].exercises[0].ref.kind, 'legacy')
 
 assert.ok(Object.keys(FOODS).length >= 150, `foods: ${Object.keys(FOODS).length}`)
 console.log(`selfcheck ok — ${Object.keys(FOODS).length} foods`)

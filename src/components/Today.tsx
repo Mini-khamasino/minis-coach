@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
-import { Plus, Undo2, CloudUpload, Share, SquarePlus, Download } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, Undo2, CloudUpload, Share, SquarePlus, Download, Play } from 'lucide-react'
 import { db, today, type Settings } from '../lib/db.ts'
 import { sum, zone, ZONE_COLOR } from '../lib/calc.ts'
 import { daysSinceBackup } from '../lib/backup.ts'
@@ -8,6 +8,8 @@ import { L } from '../lib/i18n.ts'
 import { Ring, Bar, Sheet, tick, toast } from './ui.tsx'
 import { useInstall, promptInstall } from '../lib/install.ts'
 import { WeightCard } from './WeightCard.tsx'
+import { useSync, useFeatures } from '../lib/syncCore.ts'
+import { nextSession, routineToWorkout } from '../lib/routines.ts'
 
 const BOTTLE = 750
 
@@ -16,7 +18,26 @@ export function macroTargets(s: Settings) {
   return { fat, carbs: Math.max(0, Math.round((s.goal - s.protein * 4 - fat * 9) / 4)) }
 }
 
-export function Today({ s, theme, signedIn, onSettings, onFood }: { s: Settings; theme: string; signedIn: boolean; onSettings: () => void; onFood: () => void }) {
+export function Today({ s, theme, signedIn, onSettings, onFood, onTrain }: { s: Settings; theme: string; signedIn: boolean; onSettings: () => void; onFood: () => void; onTrain?: () => void }) {
+  const sync = useSync()
+  const features = useFeatures(sync.user)
+  const routines = useLiveQuery(() => db.routines.toArray()) ?? []
+  const workouts = useLiveQuery(() => db.workouts.toArray()) ?? []
+
+  const session = useMemo(() => {
+    if (!features.routines || !routines.length) return null
+    return nextSession(routines, workouts, Date.now())
+  }, [features.routines, routines, workouts])
+
+  const startScheduled = async () => {
+    if (!session) return
+    tick()
+    const active = workouts.find((w) => !w.endedAt)
+    if (!active) {
+      await db.workouts.add(routineToWorkout(session.routine))
+    }
+    onTrain?.()
+  }
   const date = today()
   const items = useLiveQuery(() => db.items.where('date').equals(date).toArray(), [date]) ?? []
   const water = useLiveQuery(() => db.water.where('date').equals(date).sortBy('ts'), [date]) ?? []
@@ -32,6 +53,30 @@ export function Today({ s, theme, signedIn, onSettings, onFood }: { s: Settings;
   return (
     <div className="flex flex-col gap-3">
       <InstallCard />
+
+      {features.routines && session && (
+        <section className="card flex items-center justify-between p-4">
+          <div className="flex-1 min-w-0">
+            <p className="label mb-0.5">
+              {session.isToday ? L('النهارده', 'Today') : L('الجلسة القادمة', 'Next session')}
+              {session.time ? ` · ${session.time}` : ''}
+            </p>
+            <h3 className="text-[18px] font-bold truncate text-ink">
+              {session.routine.name}
+            </h3>
+            <p className="text-[12px] text-ink-2">
+              {session.routine.exercises.length} {L('تمارين', 'exercises')}
+            </p>
+          </div>
+          <button
+            className="press flex items-center gap-1.5 rounded-2xl bg-accent px-4 py-2.5 font-semibold text-white text-[14px] shrink-0"
+            onClick={startScheduled}
+          >
+            <Play size={15} fill="currentColor" />
+            {session.isToday ? L('ابدأ', 'Start') : L('تمرين', 'Workout')}
+          </button>
+        </section>
+      )}
       {!signedIn && (backupAge === null || backupAge >= 7) && (
         <button className="press card flex items-center gap-3 !py-3 text-start" onClick={onSettings}>
           <CloudUpload className="shrink-0 text-amber" size={22} />
