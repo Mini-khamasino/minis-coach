@@ -76,7 +76,7 @@ export default {
 
       const prompt = `You analyze feedback and error reports for "Mini's Coach".
 Items:
-${JSON.stringify(items, null, 2).slice(0, 30000)}
+${JSON.stringify(items).slice(0, 12000)}
 
 Return JSON with:
 1. "summary": structured summary in Arabic and English (ranked bugs, feature requests, quick wins).

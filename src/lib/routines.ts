@@ -1,4 +1,5 @@
 // Routines & Workout scheduling logic
+import { L } from './i18n.ts'
 import type { Routine, RoutineExercise, Workout } from './db.ts'
 import type { Program } from './exercises.ts'
 
@@ -153,7 +154,7 @@ export function templateFromProgram(program: Program): Routine[] {
 
     return {
       id,
-      name: `${program.en} - ${day.en}`,
+      name: L(day.ar, day.en),
       schedule: {
         mode: 'rotation',
         days: [],

@@ -40,6 +40,9 @@ export async function captureError(err: unknown, where = 'unknown'): Promise<str
         sent: false,
       })
     }
+    // keep the 50 most recent distinct errors; older ones were either sent or are stale
+    const n = await db.reports.count()
+    if (n > 50) await db.reports.bulkDelete((await db.reports.orderBy('lastAt').limit(n - 50).primaryKeys()) as string[])
     return key
   } catch (e) {
     console.warn('captureError failed', e)

@@ -1,6 +1,7 @@
 // Exercise Library: 870+ exercises from free-exercise-db + ~40 outdoor/cardio activities.
+import { L } from './i18n.ts'
 import type { Muscle } from 'react-body-highlighter'
-import { EXERCISES } from './exercises.ts'
+import { EXERCISES, exName } from './exercises.ts'
 import { norm } from './parser.ts'
 
 export type Place = 'gym' | 'home' | 'outside'
@@ -370,5 +371,29 @@ export function searchLibrary(
     const matchMuscles = ex.primaryMuscles.some((m) => norm(m).includes(q))
 
     return matchEn || matchAr || matchId || matchCat || matchMuscles
-  })
+  }).sort((a, b) => +!a.arName - +!b.arName)
+}
+
+// Arabic labels for the dataset's English equipment / category / level / muscle words
+const TERMS: Record<string, [string, string]> = {
+  barbell: ['بار', 'Barbell'], dumbbell: ['دمبل', 'Dumbbell'], cable: ['كابل', 'Cable'], machine: ['ماشين', 'Machine'],
+  'body only': ['وزن الجسم', 'Bodyweight'], bands: ['أستك مقاومة', 'Bands'], kettlebells: ['كيتل بل', 'Kettlebell'],
+  'exercise ball': ['كورة جيم', 'Exercise ball'], 'medicine ball': ['كورة طبية', 'Medicine ball'], 'foam roll': ['فوم رولر', 'Foam roller'],
+  'e-z curl bar': ['بار زجزاج', 'EZ bar'], other: ['أدوات تانية', 'Other'],
+  strength: ['قوة', 'Strength'], stretching: ['إطالة', 'Stretching'], plyometrics: ['قفز (بلايومتركس)', 'Plyometrics'],
+  powerlifting: ['باورليفتنج', 'Powerlifting'], 'olympic weightlifting': ['رفع أولمبي', 'Olympic lifting'], strongman: ['سترونج مان', 'Strongman'], cardio: ['كارديو', 'Cardio'],
+  beginner: ['مبتدئ', 'Beginner'], intermediate: ['متوسط', 'Intermediate'], expert: ['متقدم', 'Expert'],
+  abdominals: ['بطن', 'Abs'], chest: ['صدر', 'Chest'], shoulders: ['كتف', 'Shoulders'], quadriceps: ['أمامي الفخد', 'Quads'], hamstrings: ['خلفي الفخد', 'Hamstrings'],
+  triceps: ['تراي', 'Triceps'], biceps: ['باي', 'Biceps'], lats: ['ضهر (لاتس)', 'Lats'], 'middle back': ['نص الضهر', 'Middle back'], 'lower back': ['أسفل الضهر', 'Lower back'],
+  calves: ['سمانة', 'Calves'], forearms: ['ساعد', 'Forearms'], glutes: ['مؤخرة', 'Glutes'], traps: ['ترابيس', 'Traps'], adductors: ['ضامات', 'Adductors'],
+  abductors: ['أبعدات', 'Abductors'], neck: ['رقبة', 'Neck'],
+}
+/** Dataset word (equipment, category, level, muscle) in the app's language. */
+export const term = (w?: string | null) => { const t = w ? TERMS[w.toLowerCase()] : undefined; return t ? L(t[0], t[1]) : (w ?? '') }
+
+/** Display name for an exercise referenced by a routine (works without loading the library file). */
+export function refName(ref: { kind: 'lib' | 'activity' | 'legacy'; id: string }): string {
+  if (ref.kind === 'legacy') return exName(ref.id)
+  if (ref.kind === 'activity') { const a = ACTIVITIES.find((x) => x.id === ref.id); return a ? L(a.ar, a.en) : ref.id }
+  return L(DATASET_AR_NAMES[ref.id] ?? ref.id.replaceAll('_', ' '), ref.id.replaceAll('_', ' '))
 }

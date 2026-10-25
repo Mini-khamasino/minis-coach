@@ -107,7 +107,7 @@ export function useFeatures(user: User | null): Flags & { admin: boolean } {
   }, [uid])
   useEffect(() => { activeFlags = flags; activeUser = user }, [flags, user])
   const admin = user?.email === ADMIN_EMAIL
-  const allForAdmin = DEMO && admin
+  const allForAdmin = (DEMO && admin) || (import.meta.env.DEV && localStorage.getItem('devAllFeatures') === '1')
   return {
     ai: allForAdmin || flags.ai,
     feedback: allForAdmin || flags.feedback,

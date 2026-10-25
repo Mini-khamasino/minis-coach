@@ -1,3 +1,4 @@
+import { refName } from '../lib/library.ts'
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, Copy, Trash2, Edit3, Play, ChevronUp, ChevronDown, Clock, X, Calendar } from 'lucide-react'
@@ -9,7 +10,7 @@ import type { LibraryExercise, Activity } from '../lib/library.ts'
 import { L } from '../lib/i18n.ts'
 import { Sheet, Seg, toast, tick } from './ui.tsx'
 
-const DAYS_NAMES_AR = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
+const DAYS_NAMES_AR = ['حد', 'اتنين', 'تلات', 'أربع', 'خميس', 'جمعة', 'سبت']
 const DAYS_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function RoutinesSheet({
@@ -134,7 +135,7 @@ export function RoutinesSheet({
                   <div className="flex flex-wrap gap-1.5">
                     {r.exercises.slice(0, 5).map((ex, i) => (
                       <span key={i} className="rounded-lg bg-fill px-2 py-0.5 text-[11px] text-ink-2 truncate max-w-[130px]">
-                        {ex.ref.id.replaceAll('_', ' ')}
+                        {refName(ex.ref)}
                       </span>
                     ))}
                     {r.exercises.length > 5 && (
@@ -367,7 +368,7 @@ function RoutineEditorSheet({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="num text-[12px] font-bold text-ink-3">#{i + 1}</span>
-                      <p className="font-semibold text-[14px] truncate">{ex.ref.id.replaceAll('_', ' ')}</p>
+                      <p className="font-semibold text-[14px] truncate">{refName(ex.ref)}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button

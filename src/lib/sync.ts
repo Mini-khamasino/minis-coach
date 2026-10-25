@@ -100,6 +100,9 @@ export const setFlag = (name: keyof Flags, on: boolean) => setDoc(doc(fs, 'coach
 /** Fresh Firebase sign-in token for the AI relay. */
 export const idToken = () => auth.currentUser?.getIdToken() ?? Promise.resolve(null)
 
+/** Short stable id for a report key (Firestore ids can't contain '/'). */
+const hashKey = (k: string) => { let h = 5381; for (let i = 0; i < k.length; i++) h = ((h << 5) + h + k.charCodeAt(i)) | 0; return (h >>> 0).toString(36) }
+
 export async function flushReports() {
   const user = auth.currentUser
   if (!user || DEMO) return
@@ -128,10 +131,11 @@ export async function flushReports() {
   const unsent = await db.reports.filter((r) => !r.sent).toArray()
   for (const r of unsent) {
     try {
-      const docRef = doc(collection(fs, 'coachFeedback'))
+      // one doc per person+error, so a repeating error updates its count instead of piling up copies
+      const docRef = doc(fs, 'coachFeedback', `r_${user.uid}_${hashKey(r.key)}`)
       await setDoc(docRef, {
         kind: 'report',
-        key: r.key,
+        key: r.key.slice(0, 600),
         message: r.message.slice(0, 500),
         stack: (r.stack || '').slice(0, 1000),
         version: r.version || '',

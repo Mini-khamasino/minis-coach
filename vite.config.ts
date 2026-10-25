@@ -54,6 +54,11 @@ export default defineConfig({
             },
           },
           {
+            urlPattern: ({ url }) => url.pathname === '/exercises.json',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'exercise-library' },
+          },
+          {
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
             handler: 'CacheFirst',
             options: {

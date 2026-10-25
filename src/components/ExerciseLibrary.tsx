@@ -9,6 +9,7 @@ import {
   type Activity,
   type Place,
   type LibraryFilters,
+  term,
 } from '../lib/library.ts'
 import { muscleName } from '../lib/exercises.ts'
 import { L } from '../lib/i18n.ts'
@@ -146,7 +147,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
               >
                 <option value="all">{L('🔧 كل الأدوات', '🔧 All equipment')}</option>
                 {EQUIPMENTS.map((eq) => (
-                  <option key={eq} value={eq}>{eq}</option>
+                  <option key={eq} value={eq}>{term(eq)}</option>
                 ))}
               </select>
 
@@ -158,7 +159,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
               >
                 <option value="all">{L('🏷️ كل الفئات', '🏷️ All categories')}</option>
                 {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>{term(cat)}</option>
                 ))}
               </select>
 
@@ -170,7 +171,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
               >
                 <option value="all">{L('⚡ كل المستويات', '⚡ All levels')}</option>
                 {LEVELS.map((lvl) => (
-                  <option key={lvl} value={lvl}>{lvl}</option>
+                  <option key={lvl} value={lvl}>{term(lvl)}</option>
                 ))}
               </select>
 
@@ -226,13 +227,13 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
                     <p className="text-[12px] text-ink-2 truncate">{ex.name}</p>
                   )}
                   <div className="flex items-center gap-1.5 mt-1 text-[11px] text-ink-3">
-                    <span className="capitalize">{ex.category}</span>
+                    <span>{term(ex.category)}</span>
                     <span>·</span>
-                    <span className="capitalize">{ex.equipment || L('وزن الجسم', 'Bodyweight')}</span>
+                    <span>{ex.equipment ? term(ex.equipment) : L('وزن الجسم', 'Bodyweight')}</span>
                     {ex.primaryMuscles[0] && (
                       <>
                         <span>·</span>
-                        <span className="text-accent capitalize">{ex.primaryMuscles[0]}</span>
+                        <span className="text-accent">{term(ex.primaryMuscles[0])}</span>
                       </>
                     )}
                   </div>
@@ -315,9 +316,9 @@ export function ExerciseDetailSheet({
 
             {/* Badges */}
             <div className="flex flex-wrap gap-2 text-[12px]">
-              <span className="rounded-full bg-fill px-3 py-1 capitalize">🏷️ {ex.category}</span>
-              <span className="rounded-full bg-fill px-3 py-1 capitalize">🔧 {ex.equipment || L('وزن الجسم', 'bodyweight')}</span>
-              <span className="rounded-full bg-fill px-3 py-1 capitalize">⚡ {ex.level}</span>
+              <span className="rounded-full bg-fill px-3 py-1">🏷️ {term(ex.category)}</span>
+              <span className="rounded-full bg-fill px-3 py-1">🔧 {ex.equipment ? term(ex.equipment) : L('وزن الجسم', 'Bodyweight')}</span>
+              <span className="rounded-full bg-fill px-3 py-1">⚡ {term(ex.level)}</span>
               <span className="rounded-full bg-fill px-3 py-1">
                 {ex.place === 'gym' ? L('🏋️ جيم', '🏋️ Gym') : ex.place === 'home' ? L('🏠 بيت', '🏠 Home') : L('🌳 خارجي', '🌳 Outside')}
               </span>

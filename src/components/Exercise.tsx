@@ -17,7 +17,7 @@ import { ExerciseAnimation } from './ExerciseAnimation.tsx'
 
 const repsMin = (r: string) => parseInt(r) || 8
 
-const DAYS_NAMES_AR = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
+const DAYS_NAMES_AR = ['حد', 'اتنين', 'تلات', 'أربع', 'خميس', 'جمعة', 'سبت']
 const DAYS_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export const formatExName = (id: string) => {
