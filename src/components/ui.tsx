@@ -179,3 +179,12 @@ export function GoogleButton({ onClick, label }: { onClick: () => void; label: s
     </button>
   )
 }
+
+export function Toggle({ label, sub, on, onChange, disabled }: { label: string; sub?: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label className={`flex items-center gap-3 rounded-2xl bg-fill p-3.5 ${disabled ? 'opacity-50' : ''}`}>
+      <span className="flex-1"><span className="block text-[16px]">{label}</span>{sub && <span className="text-[12px] text-ink-2">{sub}</span>}</span>
+      <input type="checkbox" role="switch" className="size-5 accent-[var(--color-accent)]" checked={on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  )
+}

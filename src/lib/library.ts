@@ -333,6 +333,8 @@ export interface LibraryFilters {
   muscle?: Muscle | 'all'
   category?: string | 'all'
   level?: string | 'all'
+  /** only exercises that need nothing but your body */
+  noEquipment?: boolean
 }
 
 /** Pure search & filter over exercises */
@@ -346,6 +348,7 @@ export function searchLibrary(
   return exercises.filter((ex) => {
     if (filters) {
       if (filters.place && filters.place !== 'all' && ex.place !== filters.place) return false
+      if (filters.noEquipment && ex.equipment && ex.equipment !== 'body only') return false
       if (filters.equipment && filters.equipment !== 'all') {
         const eq = (ex.equipment || '').toLowerCase()
         if (eq !== filters.equipment.toLowerCase()) return false
@@ -395,5 +398,5 @@ export const term = (w?: string | null) => { const t = w ? TERMS[w.toLowerCase()
 export function refName(ref: { kind: 'lib' | 'activity' | 'legacy'; id: string }): string {
   if (ref.kind === 'legacy') return exName(ref.id)
   if (ref.kind === 'activity') { const a = ACTIVITIES.find((x) => x.id === ref.id); return a ? L(a.ar, a.en) : ref.id }
-  return L(DATASET_AR_NAMES[ref.id] ?? ref.id.replaceAll('_', ' '), ref.id.replaceAll('_', ' '))
+  return ref.id.replaceAll('_', ' ')
 }

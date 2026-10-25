@@ -3,13 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter'
 import { Check, Plus, RotateCcw, Timer, Trophy, X, Info } from 'lucide-react'
 import { db, today, type Settings, type Workout, type Routine } from '../lib/db.ts'
-import { EXERCISES, PROGRAMS, exName, muscleName, suggestProgram, workoutKcal, e1rm, type Program } from '../lib/exercises.ts'
+import { EXERCISES, PROGRAMS, NO_EQUIPMENT, exName, muscleName, suggestProgram, workoutKcal, e1rm, type Program } from '../lib/exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from '../lib/training.ts'
 import { L } from '../lib/i18n.ts'
 import { Sheet, Seg, toast, tick } from './ui.tsx'
 import { ProgramPicker } from './ProgramPicker.tsx'
 import { useSync, useFeatures } from '../lib/syncCore.ts'
-import { MAP_53_TO_DATASET, ACTIVITIES, activityKcal, DATASET_AR_NAMES } from '../lib/library.ts'
+import { MAP_53_TO_DATASET, ACTIVITIES, activityKcal } from '../lib/library.ts'
 import { RoutinesSheet } from './RoutinesSheet.tsx'
 import { routineToWorkout } from '../lib/routines.ts'
 import { ExerciseLibrary } from './ExerciseLibrary.tsx'
@@ -21,14 +21,13 @@ const DAYS_NAMES_AR = ['حد', 'اتنين', 'تلات', 'أربع', 'خميس',
 const DAYS_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export const formatExName = (id: string) => {
-  if (EXERCISES[id]) return L(EXERCISES[id].ar, EXERCISES[id].en)
+  if (EXERCISES[id]) return exName(id)
   if (id.startsWith('activity:')) {
     const act = ACTIVITIES.find((a) => a.id === id.slice(9))
     return act ? L(act.ar, act.en) : id.slice(9).replaceAll('_', ' ')
   }
   if (id.startsWith('lib:')) {
-    const libId = id.slice(4)
-    return DATASET_AR_NAMES[libId] ? L(DATASET_AR_NAMES[libId], libId.replaceAll('_', ' ')) : libId.replaceAll('_', ' ')
+    return id.slice(4).replaceAll('_', ' ')
   }
   return id
 }
@@ -108,7 +107,7 @@ function WeekStrip({
 
 export function Exercise({ s }: { s: Settings }) {
   const workouts = useLiveQuery(() => db.workouts.toArray().then((ws) => ws.sort((a, b) => a.startedAt - b.startedAt))) ?? []
-  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
   const active = workouts.find((w) => !w.endedAt)
   const dayIdx = nextDayIndex(workouts, program)
   const day = program.days[dayIdx]
@@ -215,7 +214,7 @@ export function Exercise({ s }: { s: Settings }) {
         />
       )}
       {sheet === 'log' && active && <Logger w={active} all={workouts} onClose={() => setSheet(null)} restSec={s.restSec} libraryAllowed={features.library} />}
-      {muscle && (features.library ? <ExerciseLibrary initialMuscle={muscle} onClose={() => setMuscle(null)} /> : <MuscleSheet muscle={muscle} place={s.place} onClose={() => setMuscle(null)} />)}
+      {muscle && (features.library ? <ExerciseLibrary initialMuscle={muscle} onClose={() => setMuscle(null)} /> : <MuscleSheet muscle={muscle} place={s.place} noEquipment={s.noEquipment} onClose={() => setMuscle(null)} />)}
     </div>
   )
 }
@@ -264,13 +263,13 @@ function BodyCard({ targets, recovering: rec, week, onMuscle }: { targets: Muscl
 
 const Dot = ({ c }: { c: string }) => <span className="mx-1 inline-block size-2.5 rounded-full align-middle" style={{ background: c }} />
 
-function MuscleSheet({ muscle, place, onClose }: { muscle: Muscle; place: 'gym' | 'home'; onClose: () => void }) {
-  const list = Object.values(EXERCISES).filter((e) => e.muscles.includes(muscle) && (e.place === 'both' || e.place === place))
+function MuscleSheet({ muscle, place, noEquipment, onClose }: { muscle: Muscle; place: 'gym' | 'home'; noEquipment?: boolean; onClose: () => void }) {
+  const list = Object.values(EXERCISES).filter((e) => e.muscles.includes(muscle) && (noEquipment ? NO_EQUIPMENT.has(e.id) : e.place === 'both' || e.place === place))
   return (
     <Sheet title={muscleName(muscle)} onClose={onClose}>
       {list.map((e) => (
         <div key={e.id} className="border-b border-hair py-3 last:border-0">
-          <p className="font-medium">{L(e.ar, e.en)} {e.muscles[0] === muscle && <span className="text-[12px] text-accent">● {L('أساسي', 'primary')}</span>}</p>
+          <p className="font-medium">{e.en} {e.muscles[0] === muscle && <span className="text-[12px] text-accent">● {L('أساسي', 'primary')}</span>}</p>
           <p className="text-[13px] text-ink-2">{L(e.tipAr, e.tipEn)}</p>
         </div>
       ))}
@@ -520,7 +519,7 @@ function AddExercise({ onPick, onClose }: { onPick: (id: string) => void; onClos
       <input className="field mb-3" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L('اسم التمرين أو العضلة…', 'Exercise or muscle…')} autoFocus />
       {list.map((e) => (
         <button key={e.id} className="press flex w-full justify-between border-b border-hair py-3 text-start" onClick={() => { onPick(e.id); onClose() }}>
-          <span>{L(e.ar, e.en)}</span><span className="text-[12px] text-ink-3">{e.muscles.slice(0, 2).map(muscleName).join(' · ')}</span>
+          <span>{e.en}</span><span className="text-[12px] text-ink-3">{e.muscles.slice(0, 2).map(muscleName).join(' · ')}</span>
         </button>
       ))}
     </Sheet>

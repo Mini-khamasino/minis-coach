@@ -66,14 +66,19 @@ const ROWS: Row[] = [
   ['russian_twist', 'روشن تويست', 'Russian twist', ['obliques', 'abs'], 'both', false, 'لف من الصدر مش الإيدين بس', 'Rotate the torso, not just the arms'],
   ['cable_crunch', 'كرانش كابل', 'Cable crunch', ['abs'], 'gym', false, 'لف ضهرك لتحت، وسطك ثابت', 'Round down, hips stay still'],
   ['side_plank', 'بلانك جانبي', 'Side plank', ['obliques'], 'both', false, 'جسمك خط مستقيم', 'Body in a straight line'],
+  ['superman', 'سوبرمان', 'Superman', ['lower-back', 'gluteal', 'upper-back'], 'home', false, 'ارفع إيديك ورجليك سوا واثبت ثانية', 'Lift arms and legs together, hold a second'],
   // forearm / misc
   ['farmer_walk', 'مشية الفلاح', "Farmer's walk", ['forearm', 'trapezius', 'abs'], 'both', true, 'دمبلين تقال وامشي مفرود', 'Heavy dumbbells, walk tall'],
 ]
 
+/** Exercises that need nothing but your body (and the floor or a chair). */
+export const NO_EQUIPMENT = new Set(['pushup', 'pike_pushup', 'diamond_pushup', 'bw_squat', 'lunge', 'bulgarian', 'glute_bridge', 'calf_raise', 'plank', 'side_plank', 'crunch', 'leg_raise', 'russian_twist', 'superman'])
+
 export const EXERCISES: Record<string, Exercise> = Object.fromEntries(
   ROWS.map(([id, ar, en, muscles, place, compound, tipAr, tipEn]) => [id, { id, ar, en, muscles, place, compound, tipAr, tipEn }]),
 )
-export const exName = (id: string) => (EXERCISES[id] ? L(EXERCISES[id].ar, EXERCISES[id].en) : id)
+// gym exercise names are shown in English in both languages (that's what people know them by); Arabic stays searchable
+export const exName = (id: string) => EXERCISES[id]?.en ?? id
 
 export const MUSCLE_LABEL: Partial<Record<Muscle, [string, string]>> = {
   chest: ['صدر', 'Chest'], 'upper-back': ['ضهر', 'Upper back'], 'lower-back': ['أسفل الضهر', 'Lower back'], trapezius: ['ترابيس', 'Traps'],
@@ -120,10 +125,21 @@ export const PROGRAMS: Program[] = [
       { ar: 'بيت B', en: 'Home B', slots: [['lunge', 3, '10/leg'], ['incline_db', 3, '8-12'], ['inverted_row', 3, '8-12'], ['pike_pushup', 3, '6-10'], ['rdl', 3, '10-12'], ['russian_twist', 3, '20']] },
     ],
   },
+  {
+    id: 'bodyweight', ar: 'من غير أدوات', en: 'No equipment', place: 'home', forDays: [2, 3, 4, 5, 6],
+    days: [
+      { ar: 'وزن الجسم A', en: 'Bodyweight A', slots: [['bw_squat', 3, '15-20'], ['pushup', 3, '8-15'], ['superman', 3, '12-15'], ['pike_pushup', 3, '6-10'], ['glute_bridge', 3, '15-20'], ['plank', 3, '30-45s']] },
+      { ar: 'وزن الجسم B', en: 'Bodyweight B', slots: [['lunge', 3, '10/leg'], ['diamond_pushup', 3, '6-12'], ['bulgarian', 3, '8-12'], ['calf_raise', 3, '15-20'], ['leg_raise', 3, '10-15'], ['side_plank', 3, '30s']] },
+    ],
+  },
 ]
 
-/** Suggested program from days/week and where they train. */
-export function suggestProgram(days: number, place: Place): Program {
+/** True when every exercise in the program needs no equipment. */
+export const isNoEquipment = (p: Program) => p.days.every((d) => d.slots.every(([id]) => NO_EQUIPMENT.has(id)))
+
+/** Suggested program from days/week, where they train, and whether they have any equipment. */
+export function suggestProgram(days: number, place: Place, noEquipment = false): Program {
+  if (noEquipment) return PROGRAMS.find(isNoEquipment)!
   if (place === 'home') return PROGRAMS.find((p) => p.id === 'home_full')!
   return PROGRAMS.find((p) => p.place === 'gym' && p.forDays.includes(days)) ?? PROGRAMS[0]
 }

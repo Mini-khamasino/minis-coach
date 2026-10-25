@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { compute, sum, zone, mifflin, trajectory, adaptiveTdee, addDays, weightTrend, targetsFor } from './calc.ts'
 import { FOODS } from './foods.ts'
 import { parse, search } from './parser.ts'
-import { PROGRAMS, suggestProgram, e1rm, workoutKcal } from './exercises.ts'
+import { PROGRAMS, suggestProgram, e1rm, workoutKcal, NO_EQUIPMENT, EXERCISES } from './exercises.ts'
 import { nextDayIndex, recovering, weeklySets, personalRecords, lastSets } from './training.ts'
 import { generate, advice, answer } from './coach.ts'
 import { sensitivity } from './privacy.ts'
@@ -104,6 +104,9 @@ assert.equal(lastSets([wk(0, 50, 'bench', 60, 10), wk(0, 5, 'bench', 70, 5)], 'b
 assert.equal(suggestProgram(4, 'gym').id, 'upper_lower')
 assert.equal(suggestProgram(6, 'gym').id, 'ppl')
 assert.equal(suggestProgram(3, 'home').id, 'home_full')
+// no equipment: the program and every exercise in it need nothing but your body
+assert.equal(suggestProgram(4, 'gym', true).id, 'bodyweight')
+assert.ok(suggestProgram(3, 'home', true).days.every((d) => d.slots.every(([id]) => NO_EQUIPMENT.has(id) && EXERCISES[id])))
 assert.equal(workoutKcal(60, 80), 400)
 
 // ── coach rules ──
@@ -179,6 +182,11 @@ assert.equal(searchLibrary('بنش', sampleExercises).length, 1)
 assert.equal(searchLibrary('ضغط', sampleExercises)[0].id, 'Pushups')
 assert.equal(searchLibrary('', sampleExercises, { place: 'gym' }).length, 1)
 assert.equal(searchLibrary('', sampleExercises, { muscle: 'chest' }).length, 2)
+assert.ok(!searchLibrary('', sampleExercises, { noEquipment: true }).some((e) => e.id === 'Barbell_Bench_Press'))
+assert.ok(searchLibrary('', sampleExercises, { noEquipment: true }).some((e) => e.id === 'Pushups'))
+assert.equal(searchLibrary('', [{ ...sampleExercises[1], id: 'X', equipment: null }], { noEquipment: true }).length, 1)
+assert.equal(validateSearchExercisesArgs({ query: 'x', noEquipment: true }).noEquipment, true)
+assert.equal(validateSearchExercisesArgs({ query: 'x', noEquipment: 'yes' }).noEquipment, undefined)
 
 // ── routines & schedule ──
 const rot1: Routine = {

@@ -31,7 +31,7 @@ export function generate(c: Ctx): Draft[] {
   const h = now.getHours()
   const t = sum(c.items.filter((i) => i.date === d))
   const out: Draft[] = []
-  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
   const nextDay = program.days[nextDayIndex(c.workouts, program)]
   const trainedToday = c.workouts.some((w) => w.endedAt && w.date === d)
   const weighedToday = c.weights.some((w) => w.date === d)
@@ -277,7 +277,7 @@ export async function aiPrompt(mode: 'full' | 'update', question: string): Promi
     const done = w.exercises.map((e) => [exName(e.exId), e.sets.filter((x) => x.done).map((x) => `${x.kg}x${x.reps}`).join(' ')]).filter(([, v]) => v).map(([n, v]) => `${n} ${v}`)
     return `- ${w.date} (${min} min, ~${workoutKcal(min, bodyKg)} kcal): ${done.join('; ')}`
   })
-  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
   const answerLang = lang === 'en' ? 'English' : 'Egyptian Arabic'
   const prs = personalRecords(await db.workouts.toArray())
 
@@ -287,7 +287,7 @@ export async function aiPrompt(mode: 'full' | 'update', question: string): Promi
 ## Me
 ${s.name || '—'}, ${s.sex === 'm' ? 'male' : 'female'}, ${s.age} y, ${s.heightCm} cm. Goal: ${s.goalType} (started ${s.startKg} kg on ${s.startDate}, target ${s.targetKg} kg).
 Targets: ${s.goal} kcal/day, protein ${s.protein} g, water ${s.waterGoal} ml. Estimated maintenance ${s.maintenance} kcal.
-Training: ${program.en}, ${s.trainDays} days/week at ${s.place === 'gym' ? 'the gym' : 'home'}. Rotation: ${program.days.map((d) => d.en).join(' → ')}.
+Training: ${program.en}, ${s.trainDays} days/week at ${s.place === 'gym' ? 'the gym' : 'home'}${s.noEquipment ? ' (no equipment, bodyweight only)' : ''}. Rotation: ${program.days.map((d) => d.en).join(' → ')}.
 Weekly sets per muscle: ${[...weeklySets(workouts, Date.now())].map(([m, n]) => `${m} ${n}`).join(', ') || 'none yet'}.
 Best lifts: ${[...prs].map(([id, p]) => `${exName(id)} ${p.kg}x${p.reps}`).join(', ') || 'none yet'}.`
     : `Update from my tracking app since ${since} (same person as before in this chat). Answer in ${answerLang}.`
@@ -384,7 +384,7 @@ export function answer(q: string, c: AskCtx): string {
     return L(`شربت ${drunk} من ${s.waterGoal / 1000} لتر. ${c.waterToday < s.waterGoal ? `فاضل ${togo} لتر.` : 'تمام 💧'}`, `${drunk} of ${s.waterGoal / 1000} L. ${c.waterToday < s.waterGoal ? `${togo} L to go.` : 'Done 💧'}`)
   }
   if (has(/تمرين|اتمرن|جيم|عضل|workout|train|gym|exercise/)) {
-    const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+    const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
     const day = program.days[nextDayIndex(c.workouts, program)]
     const list = day.slots.map(([id, sets, reps]) => `• ${exName(id)} ${sets}×${reps}`).join('\n')
     return L(`التمرين الجاي: ${day.ar}\n${list}`, `Next workout: ${day.en}\n${list}`)

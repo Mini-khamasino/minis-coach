@@ -1,18 +1,19 @@
 import { saveSettings, type Settings } from '../lib/db.ts'
-import { PROGRAMS, suggestProgram } from '../lib/exercises.ts'
+import { PROGRAMS, suggestProgram, isNoEquipment } from '../lib/exercises.ts'
 import { L } from '../lib/i18n.ts'
-import { Seg } from './ui.tsx'
+import { Seg, Toggle } from './ui.tsx'
 
 /** Gym/home, days per week, program, rest timer — used by the Train tab and by Profile. */
 export function ProgramPicker({ s, onPicked }: { s: Settings; onPicked?: () => void }) {
-  const current = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
-  const suggested = suggestProgram(s.trainDays, s.place)
+  const current = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
+  const suggested = suggestProgram(s.trainDays, s.place, s.noEquipment)
   return (
     <>
       <div className="mb-3"><Seg value={s.place} onChange={(place) => saveSettings({ place, programId: '' })} options={[['gym', L('جيم', 'Gym')], ['home', L('البيت', 'Home')]]} /></div>
+      <div className="mb-3"><Toggle label={L('🙌 معنديش أدوات', "🙌 I don't have equipment")} sub={L('تمارين بوزن جسمك بس', 'Bodyweight exercises only')} on={!!s.noEquipment} onChange={(noEquipment) => saveSettings({ noEquipment, programId: '' })} /></div>
       <p className="label mb-2">{L('أيام في الأسبوع', 'Days per week')}</p>
       <div className="mb-4"><Seg value={String(s.trainDays)} onChange={(d) => saveSettings({ trainDays: Number(d), programId: '' })} options={[2, 3, 4, 5, 6].map((d) => [String(d), String(d)] as [string, string])} /></div>
-      {PROGRAMS.filter((p) => p.place === s.place).map((p) => (
+      {PROGRAMS.filter((p) => (s.noEquipment ? isNoEquipment(p) : p.place === s.place)).map((p) => (
         <button key={p.id} className={`press mb-2 w-full rounded-2xl p-3.5 text-start ${p.id === current.id ? 'bg-accent text-white' : 'bg-fill'}`}
           onClick={() => { saveSettings({ programId: p.id }); onPicked?.() }}>
           <p className="font-semibold">{L(p.ar, p.en)} {p.id === suggested.id && <span className="text-[12px] opacity-80">· {L('مقترح ليك', 'suggested')}</span>}</p>

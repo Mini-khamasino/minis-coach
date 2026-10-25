@@ -76,13 +76,14 @@ export function validateSearchExercisesArgs(raw: unknown): {
   muscle?: string
   equipment?: string
   place?: 'gym' | 'home' | 'outside'
+  noEquipment?: boolean
 } {
   const a = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const query = typeof a.query === 'string' ? a.query.trim().slice(0, 60) : ''
   const muscle = typeof a.muscle === 'string' && a.muscle.trim() ? a.muscle.trim().slice(0, 30) : undefined
   const equipment = typeof a.equipment === 'string' && a.equipment.trim() ? a.equipment.trim().slice(0, 30) : undefined
   const place = (a.place === 'gym' || a.place === 'home' || a.place === 'outside') ? a.place : undefined
-  return { query, muscle, equipment, place }
+  return { query, muscle, equipment, place, noEquipment: a.noEquipment === true || undefined }
 }
 
 export function validateCreateRoutineArgs(raw: unknown): {

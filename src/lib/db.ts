@@ -176,6 +176,8 @@ export interface Settings {
   goalType: GoalType
   trainDays: number
   place: 'gym' | 'home'
+  /** no weights at all: bodyweight program and exercises only */
+  noEquipment?: boolean
   programId: string
   routineId?: string
   restSec: number

@@ -6,7 +6,7 @@ import { backup, prepareBackup, restore } from '../lib/backup.ts'
 import { targetsFor } from '../lib/calc.ts'
 import { signIn, logOut, pullFromCloud, backupNow, setFlag, sendFeedback, type SyncState, type Flags } from '../lib/syncCore.ts'
 import { L, lang, locale } from '../lib/i18n.ts'
-import { Sheet, Seg, GoogleButton, toast } from './ui.tsx'
+import { Sheet, Seg, GoogleButton, Toggle, toast } from './ui.tsx'
 import { ProgramPicker } from './ProgramPicker.tsx'
 
 type Page = 'root' | 'goals' | 'body' | 'training' | 'ai' | 'look' | 'data' | 'about' | 'dev' | 'feedback'
@@ -158,15 +158,6 @@ function Body({ s, done }: { s: Settings; done: () => void }) {
         </select></label>
       <SaveBtn onClick={save} />
     </div>
-  )
-}
-
-function Toggle({ label, sub, on, onChange, disabled }: { label: string; sub?: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <label className={`flex items-center gap-3 rounded-2xl bg-fill p-3.5 ${disabled ? 'opacity-50' : ''}`}>
-      <span className="flex-1"><span className="block text-[16px]">{label}</span>{sub && <span className="text-[12px] text-ink-2">{sub}</span>}</span>
-      <input type="checkbox" role="switch" className="size-5 accent-[var(--color-accent)]" checked={on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-    </label>
   )
 }
 

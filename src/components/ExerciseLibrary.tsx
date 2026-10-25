@@ -13,6 +13,7 @@ import {
 } from '../lib/library.ts'
 import { muscleName } from '../lib/exercises.ts'
 import { L } from '../lib/i18n.ts'
+import { getSettings } from '../lib/db.ts'
 import { Sheet, Seg } from './ui.tsx'
 import { ExerciseAnimation } from './ExerciseAnimation.tsx'
 
@@ -32,6 +33,8 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
   const [selectedEx, setSelectedEx] = useState<LibraryExercise | Activity | null>(null)
 
   const [place, setPlace] = useState<Place | 'all'>('all')
+  const [noEquipment, setNoEquipment] = useState(false)
+  useEffect(() => { getSettings().then((s) => setNoEquipment(!!s.noEquipment)) }, [])
   const [equipment, setEquipment] = useState<string>('all')
   const [muscle, setMuscle] = useState<Muscle | 'all'>(initialMuscle ?? 'all')
   const [category, setCategory] = useState<string>('all')
@@ -56,9 +59,10 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
       muscle: muscle !== 'all' ? muscle : undefined,
       category: category !== 'all' ? category : undefined,
       level: level !== 'all' ? level : undefined,
+      noEquipment,
     }
     return searchLibrary(query, exercises, filters)
-  }, [exercises, query, place, equipment, muscle, category, level])
+  }, [exercises, query, place, equipment, muscle, category, level, noEquipment])
 
   const filteredActivities = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -78,7 +82,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
     'calves', 'abs', 'obliques', 'trapezius'
   ]
 
-  const activeFilterCount = (place !== 'all' ? 1 : 0) + (equipment !== 'all' ? 1 : 0) + (muscle !== 'all' ? 1 : 0) + (category !== 'all' ? 1 : 0) + (level !== 'all' ? 1 : 0)
+  const activeFilterCount = (place !== 'all' ? 1 : 0) + (noEquipment ? 1 : 0) + (equipment !== 'all' ? 1 : 0) + (muscle !== 'all' ? 1 : 0) + (category !== 'all' ? 1 : 0) + (level !== 'all' ? 1 : 0)
 
   return (
     <Sheet title={L('مكتبة التمارين', 'Exercise Library')} onClose={onClose}>
@@ -123,6 +127,12 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
                 {p === 'all' ? L('كل الأماكن', 'All places') : p === 'gym' ? L('🏋️ جيم', '🏋️ Gym') : p === 'home' ? L('🏠 بيت', '🏠 Home') : L('🌳 بره', '🌳 Outside')}
               </button>
             ))}
+            {tab === 'exercises' && (
+              <button className={`press shrink-0 rounded-full px-3 py-1.5 font-medium border ${noEquipment ? 'bg-accent text-white border-accent' : 'bg-fill text-ink-2 border-hair'}`}
+                aria-pressed={noEquipment} onClick={() => setNoEquipment(!noEquipment)}>
+                🙌 {L('معنديش أدوات', "I don't have equipment")}
+              </button>
+            )}
           </div>
 
           {tab === 'exercises' && (
@@ -178,7 +188,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
               {activeFilterCount > 0 && (
                 <button
                   className="press shrink-0 rounded-full bg-red/15 text-red px-2.5 py-1 text-[12px]"
-                  onClick={() => { setPlace('all'); setEquipment('all'); setMuscle('all'); setCategory('all'); setLevel('all') }}
+                  onClick={() => { setPlace('all'); setNoEquipment(false); setEquipment('all'); setMuscle('all'); setCategory('all'); setLevel('all') }}
                 >
                   {L('مسح الفلاتر', 'Clear')}
                 </button>
@@ -220,12 +230,7 @@ export function ExerciseLibrary({ initialMuscle, onClose, onAddToRoutine }: Prop
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[15px] leading-snug truncate">
-                    {ex.arName || ex.name}
-                  </p>
-                  {ex.arName && (
-                    <p className="text-[12px] text-ink-2 truncate">{ex.name}</p>
-                  )}
+                  <p className="font-semibold text-[15px] leading-snug truncate" dir="ltr">{ex.name}</p>
                   <div className="flex items-center gap-1.5 mt-1 text-[11px] text-ink-3">
                     <span>{term(ex.category)}</span>
                     <span>·</span>
@@ -297,7 +302,7 @@ export function ExerciseDetailSheet({
 
   return (
     <Sheet
-      title={isActivity ? act!.ar : (ex!.arName || ex!.name)}
+      title={isActivity ? L(act!.ar, act!.en) : ex!.name}
       onClose={onClose}
     >
       <div className="flex flex-col gap-4 pb-6">
@@ -310,8 +315,7 @@ export function ExerciseDetailSheet({
 
             {/* Title & subtitle */}
             <div>
-              <h2 className="text-[20px] font-bold leading-tight">{ex.arName || ex.name}</h2>
-              {ex.arName && <p className="text-[14px] text-ink-2">{ex.name}</p>}
+              <h2 className="text-[20px] font-bold leading-tight" dir="ltr">{ex.name}</h2>
             </div>
 
             {/* Badges */}

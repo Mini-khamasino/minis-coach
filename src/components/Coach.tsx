@@ -4,9 +4,11 @@ import { Sparkles, RefreshCw, Copy, ArrowUp, Undo2 } from 'lucide-react'
 import { db, type CoachMessage } from '../lib/db.ts'
 import { pickReply, react, aiPrompt, markAiShared, ask } from '../lib/coach.ts'
 import { L, locale } from '../lib/i18n.ts'
-import { Sheet, toast } from './ui.tsx'
+import { Sheet, Seg, toast } from './ui.tsx'
 
 const REACTIONS = ['👍', '❤️', '😅', '💪', '👎']
+// the back-and-forth with the coach; everything else is the coach's own messages
+const CHAT_KINDS = ['ask', 'ai', 'private', 'answer']
 
 /** Send one message: to the AI when it's on (gated for privacy on the phone), otherwise to the built-in answerer. */
 function useSend(aiOn: boolean, aiV2?: boolean) {
@@ -20,38 +22,46 @@ function useSend(aiOn: boolean, aiV2?: boolean) {
   return { busy, send }
 }
 
-/** The coach writes; the person reacts, taps a quick reply, or asks / tells it anything. Reads top-to-bottom like a chat. */
+/** Chat (default): just the conversation, as bubbles. Full history: the coach's own messages too, with reactions and quick replies. */
 export function Coach({ visible, aiOn, aiV2 }: { visible: boolean; aiOn: boolean; aiV2?: boolean }) {
-  const msgs = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray().then((a) => a.reverse())) ?? []
-  const [q, setQ] = useState('')
+  const all = useLiveQuery(() => db.messages.orderBy('id').reverse().limit(80).toArray().then((a) => a.reverse())) ?? []
+  const [view, setView] = useState<'chat' | 'all'>('chat')
+  const msgs = view === 'chat' ? all.filter((m) => CHAT_KINDS.includes(m.kind)) : all
+  const unread = all.filter((m) => !m.read).length
   const [promptQ, setPromptQ] = useState('')
   const end = useRef<HTMLDivElement>(null)
-  const { busy, send: sendNow } = useSend(aiOn, aiV2)
-  useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length, busy])
-  const send = () => { sendNow(q); setQ('') }
+  const { busy, send } = useSend(aiOn, aiV2)
+  useEffect(() => { if (visible) end.current?.scrollIntoView({ block: 'end' }) }, [visible, msgs.length, busy, view])
   const lastShare = useLiveQuery(() => db.kv.get('lastAiShare'))?.value as number | undefined
   const [ai, setAi] = useState<'full' | 'update' | null>(null)
 
-  // opening the tab marks everything read (clears the dot)
+  // seeing the full history marks the coach's messages read (clears the dot); chat messages are born read
   useEffect(() => {
-    if (visible) db.messages.filter((m) => !m.read).modify({ read: true })
-  }, [visible, msgs.length])
+    if (visible && view === 'all') db.messages.filter((m) => !m.read).modify({ read: true })
+  }, [visible, view, all.length])
 
   const staleDays = lastShare ? Math.floor((Date.now() - lastShare) / 86400_000) : null
   let lastDate = ''
 
   return (
     <div className="flex flex-col gap-3">
-      <section className="card !p-3">
+      <Seg value={view} onChange={setView} options={[['chat', L('💬 شات', '💬 Chat')], ['all', L('🗂️ كل الرسايل', '🗂️ Full history') + (unread ? ` · ${unread}` : '')]]} />
+      {view === 'all' && <section className="card !p-3">
         <p className="mb-2 text-[13px] text-ink-2">{L('عايز رأي ذكاء اصطناعي؟ خد بياناتك في رسالة جاهزة لـ ChatGPT أو Gemini أو Claude:', 'Want an AI’s take? Get your data as a ready message for ChatGPT, Gemini or Claude:')}</p>
         <div className="grid grid-cols-2 gap-2">
           <button className="press flex items-center justify-center gap-1.5 rounded-2xl bg-accent py-2.5 text-[14px] font-semibold text-white" onClick={() => setAi('full')}><Sparkles size={16} /> {L('شات جديد', 'New AI chat')}</button>
           <button className="press flex items-center justify-center gap-1.5 rounded-2xl bg-fill py-2.5 text-[14px] font-semibold disabled:opacity-40" disabled={!lastShare} onClick={() => setAi('update')}><RefreshCw size={16} /> {L('تحديث', 'Update')}</button>
         </div>
         {staleDays !== null && staleDays >= 5 && <p className="mt-2 text-center text-[12px] text-amber">{L(`مبعتش تحديث للـ AI من ${staleDays} يوم`, `You haven't updated your AI in ${staleDays} days`)}</p>}
-      </section>
+      </section>}
 
-      {!msgs.length && (
+      {!msgs.length && view === 'chat' && (
+        <div className="card text-center text-ink-2">
+          <p className="mb-1 text-[28px]">💬</p>
+          <p>{aiOn ? L('قول أي حاجة: أكلك، ميتك، وزنك، تمرينك، أو اسأل.', 'Say anything: food, water, weight, workout — or ask.') : L('اسأل عن أكلك أو أرقامك.', 'Ask about your food or numbers.')}</p>
+        </div>
+      )}
+      {!msgs.length && view === 'all' && (
         <div className="card text-center text-ink-2">
           <p className="mb-1 text-[28px]">🧠</p>
           <p>{L('الكوتش هيبعتلك رسايل طول اليوم حسب أكلك وتمرينك ووزنك.', 'Your coach will message you through the day based on your food, training and weight.')}</p>
@@ -64,21 +74,29 @@ export function Coach({ visible, aiOn, aiV2 }: { visible: boolean; aiOn: boolean
         return (
           <div key={m.id} className="contents">
             {divider && <p className="mt-1 text-center text-[12px] text-ink-3">{new Date(m.date).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
-            <Bubble m={m} onPrompt={(text) => { setPromptQ(text); setAi('full') }} />
+            <Bubble m={m} chat={view === 'chat'} onPrompt={(text) => { setPromptQ(text); setAi('full') }} />
           </div>
         )
       })}
 
       {busy && <Typing />}
       <div ref={end} />
-      <form className="glass sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send() }}>
-        <input className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-ink-3" value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder={aiOn ? L('قول أي حاجة… "فطرت 2 بيض ورغيف"', 'Say anything… "had 2 eggs and a pita"') : L('اسأل الكوتش… ينفع آكل كنافة؟', 'Ask the coach… can I eat kunafa?')} aria-label={L('اسأل الكوتش', 'Ask the coach')} enterKeyHint="send" />
-        <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim() || busy} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
-      </form>
+      <Composer aiOn={aiOn} busy={busy} onSend={send} />
 
       {ai && <AiSheet mode={ai} initialQ={promptQ} onClose={() => { setAi(null); setPromptQ('') }} />}
     </div>
+  )
+}
+
+/** Own state, so typing re-renders only the input box, not the whole thread. */
+function Composer({ aiOn, busy, onSend }: { aiOn: boolean; busy: boolean; onSend: (q: string) => void }) {
+  const [q, setQ] = useState('')
+  return (
+    <form className="glass sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center gap-2 rounded-full py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); onSend(q); setQ('') }}>
+      <input className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-ink-3" value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder={aiOn ? L('قول أي حاجة… "فطرت 2 بيض ورغيف"', 'Say anything… "had 2 eggs and a pita"') : L('اسأل الكوتش… ينفع آكل كنافة؟', 'Ask the coach… can I eat kunafa?')} aria-label={L('اسأل الكوتش', 'Ask the coach')} enterKeyHint="send" />
+      <button className="press grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30" disabled={!q.trim() || busy} aria-label={L('ابعت', 'Send')}><ArrowUp size={20} /></button>
+    </form>
   )
 }
 
@@ -94,11 +112,12 @@ const PRIVATE_TEXT: Record<string, [string, string]> = {
   crisis: ['💛 أنا آسف إنك حاسس كده — انت مش لوحدك. كلم حد قريب منك دلوقتي. لو في خطر اتصل بالطوارئ: 997 في السعودية، 123 في مصر. وفي السعودية تقدر تكلم 937 (وزارة الصحة) 24 ساعة.', "💛 I'm sorry you feel this way — you're not alone. Reach out to someone close to you now. If you're in danger call emergency services: 997 in Saudi Arabia, 123 in Egypt. In Saudi Arabia you can also call 937 (Ministry of Health), 24/7."],
 }
 
-function Bubble({ m, onPrompt }: { m: CoachMessage; onPrompt?: (q: string) => void }) {
+function Bubble({ m, chat, onPrompt }: { m: CoachMessage; chat?: boolean; onPrompt?: (q: string) => void }) {
+  const shape = chat ? 'w-fit max-w-[88%] rounded-[20px] rounded-es-md' : 'rounded-[22px]'
   if (m.kind === 'private') {
     const [ar, en] = PRIVATE_TEXT[m.text] ?? PRIVATE_TEXT.private
     return (
-      <article className="surface pop-enter rounded-[22px] p-3.5">
+      <article className={`surface pop-enter p-3.5 ${shape}`}>
         <p className="text-[15px] leading-relaxed">{L(ar, en)}</p>
         {m.text !== 'crisis' && m.privateQ && (
           <button className="press mt-3 rounded-full bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-white" onClick={() => onPrompt?.(m.privateQ!)}>🔒 {L('اعمل البرومبت', 'Build the prompt')}</button>
@@ -108,7 +127,7 @@ function Bubble({ m, onPrompt }: { m: CoachMessage; onPrompt?: (q: string) => vo
   }
   if (m.kind === 'ai') {
     return (
-      <article className="surface pop-enter rounded-[22px] p-3.5">
+      <article className={`surface pop-enter p-3.5 ${shape}`}>
         <p className="mb-1 text-[11px] text-ink-3">✨ {new Date(m.ts).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}{m.remaining !== undefined && m.remaining < 30 ? ` · ${L(`فاضل ${m.remaining} رسالة النهارده`, `${m.remaining} messages left today`)}` : ''}</p>
         <p className="text-[15px] leading-relaxed whitespace-pre-line">{m.text}</p>
         {m.receipt && (
@@ -129,7 +148,7 @@ function Bubble({ m, onPrompt }: { m: CoachMessage; onPrompt?: (q: string) => vo
   }
   const isReply = m.kind === 'reply' || m.kind === 'answer'
   return (
-    <article className={`pop-enter surface rounded-[22px] p-3.5 ${isReply ? 'ms-6' : ''}`}>
+    <article className={`pop-enter surface p-3.5 ${shape} ${isReply && !chat ? 'ms-6' : ''}`}>
       <p className="mb-1 text-[11px] text-ink-3">{isReply ? '↳ ' : '🧠 '}{new Date(m.ts).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}</p>
       <p className="text-[15px] leading-relaxed whitespace-pre-line">{m.text}</p>
       {m.replies && (
@@ -190,7 +209,7 @@ export function AssistantSheet({ aiOn, aiV2, onClose, onOpenCoach }: { aiOn: boo
     <Sheet title={L('✨ الكوتش', '✨ Coach')} onClose={onClose}>
       <div className="flex flex-col gap-2.5 pb-3">
         {!msgs.length && <p className="py-4 text-center text-[14px] text-ink-2">{aiOn ? L('قول أي حاجة: أكلك، ميتك، وزنك، تمرينك، أو اسأل.', 'Say anything: food, water, weight, workout — or ask.') : L('اسأل عن أكلك أو أرقامك.', 'Ask about your food or numbers.')}</p>}
-        {msgs.map((m) => <Bubble key={m.id} m={m} onPrompt={() => { onClose(); onOpenCoach() }} />)}
+        {msgs.map((m) => <Bubble key={m.id} m={m} chat onPrompt={() => { onClose(); onOpenCoach() }} />)}
         {busy && <Typing />}
       </div>
       <form className="flex items-center gap-2 rounded-full bg-fill py-1.5 ps-4 pe-1.5" onSubmit={(e) => { e.preventDefault(); send(q); setQ('') }}>

@@ -55,7 +55,7 @@ async function context(s: Settings, v2: boolean) {
   const trend = weightTrend(weights)
   const last = weights.at(-1)
   const weekAgo = [...trend].filter(([k]) => k <= addDays(d, -7)).at(-1)?.[1]
-  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+  const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
   const t = sum(items)
   const days = [...new Set(week.map((i) => i.date))].sort().map((date) => {
     const x = sum(week.filter((i) => i.date === date))
@@ -81,6 +81,7 @@ async function context(s: Settings, v2: boolean) {
       program: program.en,
       nextWorkout: program.days[nextDayIndex(workouts, program)].en,
       daysPerWeek: s.trainDays,
+      ...(s.noEquipment && { noEquipment: true }),
       sessionsLast7Days: new Set(workouts.filter((w) => w.endedAt && w.date >= addDays(d, -7)).map((w) => w.date)).size,
     },
     notes: notes.map((n) => n.text),
@@ -133,6 +134,7 @@ const TOOLS_V2 = [
     muscle: { type: 'string', description: 'Body muscle, e.g. chest, back, quadriceps, bicep, shoulders, abs' },
     equipment: { type: 'string', description: 'Equipment, e.g. barbell, dumbbell, body weight, cable, machine' },
     place: { type: 'string', enum: ['gym', 'home', 'outside'], description: 'Workout location' },
+    noEquipment: { type: 'boolean', description: 'Only exercises that need no equipment (bodyweight). Use when the person has no equipment.' },
   }, ['query']),
   fn('create_routine', 'Create a new training routine with schedule and exercises. Ask 2-4 short questions first if goal, days, place, equipment, or session time are unknown.', {
     name: { type: 'string', description: 'Routine name, e.g. "Push 3 Days"' },
@@ -257,7 +259,7 @@ async function run(call: ToolCall, undo: Undo, receipt: string[], s: Settings): 
       if (!ex) return 'unknown exercise — ask which one'
       const sets = ((Array.isArray(a.sets) ? a.sets : []) as Record<string, unknown>[]).map((x) => ({ kg: clamp(x.kg, 0, 500) ?? 0, reps: clamp(x.reps, 1, 100) ?? 0, done: true })).filter((x) => x.reps)
       if (!sets.length) return 'no sets'
-      const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place)
+      const program = PROGRAMS.find((p) => p.id === s.programId) ?? suggestProgram(s.trainDays, s.place, s.noEquipment)
       const open = (await db.workouts.where('date').equals(d).toArray()).find((w) => !w.endedAt) ?? (await db.workouts.where('date').equals(d).toArray()).at(-1)
       if (open) {
         undo.restoreWorkout.push(structuredClone(open))
@@ -313,6 +315,7 @@ async function run(call: ToolCall, undo: Undo, receipt: string[], s: Settings): 
         place: args.place,
         equipment: args.equipment,
         muscle: args.muscle as any,
+        noEquipment: args.noEquipment,
       })
       const out = hits.slice(0, 6).map((e) => ({
         id: e.id,
